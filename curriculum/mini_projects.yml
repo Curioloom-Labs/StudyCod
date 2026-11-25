@@ -49,27 +49,17 @@ courses:
         - Кожна команда має один визначений формат відповіді.
 
     - key: python-file-backup
-      title: Резервне копіювання файлів
-      description: Створіть CLI-інструмент, який знаходить файли за правилами, копіює їх до резервної директорії та не ламає всю операцію через один недоступний файл.
+      title: "Перевірник резервних копій"
+      description: "Реалізуйте backup_impl.backup_files(source_dir, destination_dir, relative_paths). Функція копіює байти кожного доступного файла, зберігає вкладену структуру, відхиляє шляхи поза джерелом і продовжує роботу після відсутнього файла. Не запускайте копіювання під час імпорту модуля."
       estimatedMinutes: 165
-      skills: [pathlib, файли, контекстні менеджери, винятки]
+      skills: ["pathlib","безпечні шляхи","копіювання байтів","контекстні менеджери","обробка помилок"]
       requiredTopicKeys: [shlyakhy-ta-fayly-pathlib, fayly-ta-kontekstni-menedzhery, obrobka-vynyatkiv]
-      template: "main.py"
+      template: "main.py\nbackup_impl.py"
+      checkSpec: {"kind":"python-filesystem","module":"backup_impl","function":"backup_files"}
       milestones:
-        - id: scan
-          title: Пошук файлів
-          description: Визначте правила відбору та безпечну поведінку для порожньої директорії.
-        - id: copy
-          title: Копіювання
-          description: Скопіюйте файли в контрольовану директорію без перезапису неочікуваних даних.
-        - id: errors
-          title: Обробка помилок
-          description: Зафіксуйте проблемні файли у звіті та продовжіть обробку доступних.
+        [{"id":"contract","title":"Контракт функції","description":"Оголосіть backup_files(source_dir, destination_dir, relative_paths) у backup_impl.py та визначте поведінку для одного файла."},{"id":"copy","title":"Безпечне копіювання","description":"Збережіть відносні шляхи й байти файлів, створюйте батьківські директорії та відхиляйте вихід за source_dir."},{"id":"recovery","title":"Незалежність помилок","description":"Обробляйте помилку кожного файла окремо, щоб відсутній чи недоступний файл не зупиняв копіювання решти."},{"id":"repeatability","title":"Повторний запуск","description":"Повторіть операцію та перевірте, що структура й вміст резервної копії лишилися коректними."}]
       acceptanceCriteria:
-        - Шляхи будуються через pathlib без залежності від операційної системи.
-        - Повторний запуск не пошкоджує вже створену резервну копію.
-        - Помилка одного файлу не приховує результати інших.
-
+        ["Кожен доступний запитаний файл скопійовано побайтно зі збереженням відносного шляху.","Абсолютний шлях або шлях за межами source_dir не записує файл поза destination_dir.","Відсутній файл не зупиняє копіювання інших доступних файлів.","Повторний запуск не пошкоджує файли й не створює зайвих копій."]
     - key: python-product-catalog
       title: Каталог товарів
       description: Побудуйте CLI-каталог товарів із dataclass-моделлю, пошуком, фільтрацією та текстовим звітом про залишки.
@@ -254,9 +244,7 @@ courses:
           title: Перевірка
           description: Напишіть тести для валідної форми, помилки, порожнього списку та повторного запиту.
       acceptanceCriteria:
-        - POST із невалідною назвою не змінює базу.
-        - Сесія не містить пароль або зайві персональні дані.
-        - Error page не показує traceback користувачу.
+        ["POST із невалідною назвою не змінює базу.","Сесія не містить пароль або зайві персональні дані.","Error page не показує traceback користувачу.","GET /health повертає HTTP 200 і JSON зі status=ok."]
 
     - key: flask-notes-api
       title: Flask Notes API
@@ -283,9 +271,7 @@ courses:
           title: Контрактні тести
           description: Перевірте 401, 403, 404, 422 і pagination.
       acceptanceCriteria:
-        - SQL-запити параметризовані.
-        - Власність ресурсу перевіряється на сервері.
-        - Тести запускаються без production secrets.
+        ["SQL-запити параметризовані.","Власність ресурсу перевіряється на сервері.","Тести запускаються без production secrets.","GET /health повертає HTTP 200 і JSON зі status=ok."]
 
     - key: flask-storefront
       title: Flask-вітрина
@@ -309,9 +295,7 @@ courses:
           title: Безпечний UI
           description: Не вставляйте неперевірений HTML і не показуйте traceback користувачу.
       acceptanceCriteria:
-        - Невалідна форма не створює замовлення.
-        - Порожній каталог має окремий стан, а не порожню сторінку.
-        - GET-запит не змінює дані.
+        ["Невалідна форма не створює замовлення.","Порожній каталог має окремий стан, а не порожню сторінку.","GET-запит не змінює дані.","GET /health повертає HTTP 200 і JSON зі status=ok."]
 
     - key: flask-job-board
       title: Дошка фонових задач
@@ -335,9 +319,7 @@ courses:
           title: Повторний запуск
           description: Не створюйте дубль для того самого idempotency key.
       acceptanceCriteria:
-        - Повторний запит не дублює активну задачу.
-        - Виняток у worker переходить у failed із безпечним повідомленням.
-        - Тести не запускають реальну зовнішню чергу.
+        ["Повторний запит не дублює активну задачу.","Виняток у worker переходить у failed із безпечним повідомленням.","Тести не запускають реальну зовнішню чергу.","GET /health повертає HTTP 200 і JSON зі status=ok."]
 
     - key: flask-operations-console
       title: Операційна консоль Flask
@@ -361,9 +343,7 @@ courses:
           title: Спостережуваність
           description: Додайте request id і логування без секретів.
       acceptanceCriteria:
-        - Readiness не повертає ready при недоступній критичній залежності.
-        - Клієнт отримує однаковий формат помилки для 4xx і 5xx.
-        - Секрети не потрапляють у логи.
+        ["Readiness не повертає ready при недоступній критичній залежності.","Клієнт отримує однаковий формат помилки для 4xx і 5xx.","Секрети не потрапляють у логи.","GET /health повертає HTTP 200 і JSON зі status=ok."]
 
   fastapi:
     - key: fastapi-reading-log
@@ -391,10 +371,7 @@ courses:
           title: Якість API
           description: Додайте pagination, 401/403/404/409/422 тести, OpenAPI metadata.
       acceptanceCriteria:
-        - Жоден route не приймає довільний dict замість описаної моделі.
-        - Сесія БД закривається після кожного request.
-        - Користувач не може читати або змінювати чужий запис.
-        - Тести не роблять реальних зовнішніх HTTP-запитів.
+        ["Жоден route не приймає довільний dict замість описаної моделі.","Сесія БД закривається після кожного request.","Користувач не може читати або змінювати чужий запис.","Тести не роблять реальних зовнішніх HTTP-запитів.","GET /health повертає HTTP 200 і JSON зі status=ok."]
 
     - key: fastapi-team-library
       title: FastAPI Team Library
@@ -421,9 +398,7 @@ courses:
           title: Спостережуваність
           description: Додайте request id, структуровані помилки та метрики успіху/відмови.
       acceptanceCriteria:
-        - Недозволена роль отримує 403 до зміни стану.
-        - Повторне надсилання одного job не створює дубль.
-        - Background task не використовує закриту request session.
+        ["Недозволена роль отримує 403 до зміни стану.","Повторне надсилання одного job не створює дубль.","Background task не використовує закриту request session.","GET /health повертає HTTP 200 і JSON зі status=ok."]
 
     - key: fastapi-production-api
       title: FastAPI Production API
@@ -450,9 +425,7 @@ courses:
           title: Розгортання
           description: Опишіть запуск, rollback, міграції, logs і graceful shutdown.
       acceptanceCriteria:
-        - У репозиторії немає production secret.
-        - Debug вимкнено в production profile.
-        - Readiness не повертає ready при недоступній критичній залежності.
+        ["У репозиторії немає production secret.","Debug вимкнено в production profile.","Readiness не повертає ready при недоступній критичній залежності.","GET /health повертає HTTP 200 і JSON зі status=ok."]
 
     - key: fastapi-upload-center
       title: Центр завантажень
@@ -476,9 +449,7 @@ courses:
           title: Потокова видача
           description: Поверніть файл потоково й обробіть відсутній ресурс через HTTPException.
       acceptanceCriteria:
-        - Надто великий або заборонений файл отримує 4xx.
-        - Шлях з імені клієнта не дозволяє path traversal.
-        - Тести не залежать від локальних production-файлів.
+        ["Надто великий або заборонений файл отримує 4xx.","Шлях з імені клієнта не дозволяє path traversal.","Тести не залежать від локальних production-файлів.","GET /health повертає HTTP 200 і JSON зі status=ok."]
 
     - key: fastapi-realtime-feed
       title: Realtime-стрічка
@@ -502,9 +473,7 @@ courses:
           title: Життєвий цикл
           description: Обробіть disconnect, повільного клієнта та завершення сервера.
       acceptanceCriteria:
-        - Відключення одного клієнта не завершує трансляцію для інших.
-        - Події мають валідну схему й послідовний ідентифікатор.
-        - Тести не залишають фонового task після завершення.
+        ["Відключення одного клієнта не завершує трансляцію для інших.","Події мають валідну схему й послідовний ідентифікатор.","Тести не залишають фонового task після завершення.","GET /health повертає HTTP 200 і JSON зі status=ok."]
 
   computer-vision:
     - key: cv-document-scanner
@@ -1063,27 +1032,17 @@ courses:
         - Помилка завантаження не залишає частково валідний об’єкт.
 
     - key: cpp-build-tool
-      title: Інструмент складання
-      description: Побудуйте невеликий C++-проєкт із кількома translation units, власним заголовком і відтворюваною командою складання.
+      title: "Багатофайловий C++ build tool"
+      description: "Створіть багатофайлову C++-утиліту для формування плану складання. У main.cpp обробляйте команди ADD <відносний .cpp шлях>, REMOVE <шлях>, REPORT і EXIT; функцію звіту оголосіть в include/report.hpp та визначте в src/report.cpp. Додайте CMakeLists.txt з окремими translation units. REPORT друкує відсортовані шляхи та translation_units=N."
       estimatedMinutes: 180
-      skills: [headers, preprocessing, linking, build, diagnostics]
+      skills: ["заголовки","translation units","простори імен","лінкування","валідація шляхів","CMake"]
       requiredTopicKeys: [zaholovky-ta-kompilyatsiyni-odynytsi, preprotsesor-i-makrosy, skladannya-proyektu-ta-linkuvannya]
-      template: "include/\nsrc/\ntests/\nCMakeLists.txt"
+      template: "main.cpp\nsrc/report.cpp\ninclude/report.hpp\nCMakeLists.txt"
+      checkSpec: {"kind":"cpp-build","requiredFiles":["main.cpp","src/report.cpp","include/report.hpp","CMakeLists.txt"],"requiredFileContents":{"CMakeLists.txt":["add_executable","main.cpp","src/report.cpp","target_include_directories"]}}
       milestones:
-        - id: units
-          title: Translation units
-          description: Розділіть інтерфейс і реалізацію та приберіть дубльовані символи.
-        - id: build
-          title: Лінкування
-          description: Налаштуйте відтворюване складання і зрозумілий діагностичний вивід.
-        - id: tests
-          title: Перевірка збірки
-          description: Додайте окрему тестову ціль і команду запуску.
+        [{"id":"manifest","title":"Команди маніфесту","description":"Реалізуйте ADD, REMOVE, REPORT та EXIT із дедуплікацією шляхів і перевіркою суфікса .cpp."},{"id":"units","title":"Окремі одиниці трансляції","description":"Розмістіть декларацію в include/report.hpp, реалізацію в src/report.cpp, а виклики в main.cpp."},{"id":"build","title":"Відтворюване складання","description":"Визначте executable і include-директорію в CMakeLists.txt та зберіть два вихідні файли окремо."},{"id":"diagnostics","title":"Діагностика","description":"Перевірте порожній звіт, дублікат, невідомий шлях і помилкову команду."}]
       acceptanceCriteria:
-        - Чисте складання не залежить від локальних артефактів.
-        - Заголовки не створюють multiple definition.
-        - Помилка компіляції має зрозумілу адресу проблеми.
-
+        ["Judge збирає main.cpp і src/report.cpp як окремі translation units та всі 15 прикладів CLI проходять.","CMakeLists.txt містить executable з обома вихідними файлами й include-директорією.","Абсолютні шляхи, вихід через .. та файли з іншим суфіксом відхиляються.","REPORT виводить унікальні шляхи в лексикографічному порядку та правильну кількість."]
     - key: cpp-concurrent-queue
       title: Потокобезпечна черга
       description: Реалізуйте bounded queue для producer/consumer, синхронізуйте доступ і коректно завершіть усі потоки.

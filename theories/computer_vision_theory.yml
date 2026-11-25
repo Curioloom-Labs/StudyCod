@@ -102,11 +102,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Який порядок індексів
-        використовує image[y, x] у NumPy?","options":["Спочатку стовпець, потім
-        рядок","Спочатку рядок/y, потім стовпець/x","Тільки номер
-        каналу","Порядок не має значення"],"answer":1,"explanation":"NumPy
-        індексує масив як рядок, стовпець, а для кольору додається канал."}
+        {"type":"prediction","lang":"python","question":"Який порядок індексів використовує image[y, x] у NumPy?","options":["Спочатку стовпець, потім рядок","Спочатку рядок/y, потім стовпець/x","Тільки номер каналу","Порядок не має значення"],"answer":1,"explanation":"NumPy індексує масив як рядок, стовпець, а для кольору додається канал."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Який порядок індексів використовує image[y, x] у NumPy?","options":["Спочатку стовпець, потім рядок","Спочатку рядок/y, потім стовпець/x","Тільки номер каналу","Порядок не має значення"],"answer":1,"explanation":"NumPy індексує масив як рядок, стовпець, а для кольору додається канал."}]}
 
         ```
 
@@ -153,6 +155,7 @@ topics:
 
         if image.ndim != 3 or image.shape[2] != 3:
             raise ValueError('expected RGB image')
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -198,6 +201,7 @@ topics:
 
         if image.ndim != 3 or image.shape[2] != 3:
             raise ValueError('expected RGB image')
+
         ```
 
         **Навіщо саме це тут:** Захисна перевірка робить помилку формату явною
@@ -213,13 +217,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Чому RGB і BGR не можна
-        взаємозамінно передавати між PIL та OpenCV?","options":["Вони мають
-        різну кількість пікселів","У них різний порядок каналів","Один формат не
-        підтримує NumPy","BGR означає
-        grayscale"],"answer":1,"explanation":"Значення каналів ті самі за
-        змістом, але їх порядок різний; без конвертації червоний і синій
-        поміняються місцями."}
+        {"type":"prediction","lang":"python","question":"Чому RGB і BGR не можна взаємозамінно передавати між PIL та OpenCV?","options":["Вони мають різну кількість пікселів","У них різний порядок каналів","Один формат не підтримує NumPy","BGR означає grayscale"],"answer":1,"explanation":"Значення каналів ті самі за змістом, але їх порядок різний; без конвертації червоний і синій поміняються місцями."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Чому RGB і BGR не можна взаємозамінно передавати між PIL та OpenCV?","options":["Вони мають різну кількість пікселів","У них різний порядок каналів","Один формат не підтримує NumPy","BGR означає grayscale"],"answer":1,"explanation":"Значення каналів ті самі за змістом, але їх порядок різний; без конвертації червоний і синій поміняються місцями."}]}
 
         ```
 
@@ -325,13 +329,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Чому нормалізація має
-        бути однаковою під час навчання та inference?","options":["Щоб файл
-        займав менше місця","Щоб модель бачила дані в тому самому числовому
-        масштабі","Бо resize працює лише з float","Щоб автоматично виправити
-        RGB/BGR"],"answer":1,"explanation":"Модель вивчила залежності для
-        конкретного розподілу значень; інший preprocessing змінює її вхідний
-        простір."}
+        {"type":"prediction","lang":"python","question":"Чому нормалізація має бути однаковою під час навчання та inference?","options":["Щоб файл займав менше місця","Щоб модель бачила дані в тому самому числовому масштабі","Бо resize працює лише з float","Щоб автоматично виправити RGB/BGR"],"answer":1,"explanation":"Модель вивчила залежності для конкретного розподілу значень; інший preprocessing змінює її вхідний простір."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Чому нормалізація має бути однаковою під час навчання та inference?","options":["Щоб файл займав менше місця","Щоб модель бачила дані в тому самому числовому масштабі","Бо resize працює лише з float","Щоб автоматично виправити RGB/BGR"],"answer":1,"explanation":"Модель вивчила залежності для конкретного розподілу значень; інший preprocessing змінює її вхідний простір."}]}
 
         ```
 
@@ -433,12 +437,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що зазвичай
-        відбувається, якщо збільшити ядро GaussianBlur?","options":["Зображення
-        стає різкішим без втрат","Зменшується шум, але може втрачатися дрібна
-        деталь","Змінюється порядок RGB на BGR","Пікселі стають
-        текстом"],"answer":1,"explanation":"Сильніше згладжування зменшує
-        локальні коливання, але може стерти тонкі краї та текстури."}
+        {"type":"prediction","lang":"python","question":"Що зазвичай відбувається, якщо збільшити ядро GaussianBlur?","options":["Зображення стає різкішим без втрат","Зменшується шум, але може втрачатися дрібна деталь","Змінюється порядок RGB на BGR","Пікселі стають текстом"],"answer":1,"explanation":"Сильніше згладжування зменшує локальні коливання, але може стерти тонкі краї та текстури."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що зазвичай відбувається, якщо збільшити ядро GaussianBlur?","options":["Зображення стає різкішим без втрат","Зменшується шум, але може втрачатися дрібна деталь","Змінюється порядок RGB на BGR","Пікселі стають текстом"],"answer":1,"explanation":"Сильніше згладжування зменшує локальні коливання, але може стерти тонкі краї та текстури."}]}
 
         ```
 
@@ -540,12 +545,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що є результатом
-        cv2.Canny у типовому pipeline?","options":["Готовий список розпізнаних
-        об'єктів","Бінарна карта потенційних меж","Таблиця RGB-значень у
-        CSV","Координати лише одного пікселя"],"answer":1,"explanation":"Canny
-        знаходить зміни інтенсивності; щоб отримати об'єкти, потрібні додаткові
-        кроки."}
+        {"type":"prediction","lang":"python","question":"Що є результатом cv2.Canny у типовому pipeline?","options":["Готовий список розпізнаних об'єктів","Бінарна карта потенційних меж","Таблиця RGB-значень у CSV","Координати лише одного пікселя"],"answer":1,"explanation":"Canny знаходить зміни інтенсивності; щоб отримати об'єкти, потрібні додаткові кроки."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що є результатом cv2.Canny у типовому pipeline?","options":["Готовий список розпізнаних об'єктів","Бінарна карта потенційних меж","Таблиця RGB-значень у CSV","Координати лише одного пікселя"],"answer":1,"explanation":"Canny знаходить зміни інтенсивності; щоб отримати об'єкти, потрібні додаткові кроки."}]}
 
         ```
 
@@ -649,13 +655,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Для чого потрібна
-        бінарна маска перед пошуком контурів?","options":["Щоб описати
-        foreground і background у форматі для contour algorithm","Щоб
-        автоматично назвати клас об'єкта","Щоб відновити пошкоджений JPEG","Щоб
-        змінити Python на C++"],"answer":0,"explanation":"Контури зазвичай
-        шукають на foreground/background-представленні, а не на довільному
-        кольоровому фото."}
+        {"type":"prediction","lang":"python","question":"Для чого потрібна бінарна маска перед пошуком контурів?","options":["Щоб описати foreground і background у форматі для contour algorithm","Щоб автоматично назвати клас об'єкта","Щоб відновити пошкоджений JPEG","Щоб змінити Python на C++"],"answer":0,"explanation":"Контури зазвичай шукають на foreground/background-представленні, а не на довільному кольоровому фото."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Для чого потрібна бінарна маска перед пошуком контурів?","options":["Щоб описати foreground і background у форматі для contour algorithm","Щоб автоматично назвати клас об'єкта","Щоб відновити пошкоджений JPEG","Щоб змінити Python на C++"],"answer":0,"explanation":"Контури зазвичай шукають на foreground/background-представленні, а не на довільному кольоровому фото."}]}
 
         ```
 
@@ -703,6 +709,7 @@ topics:
             if cv2.contourArea(contour) >= 100:
                 x, y, w, h = cv2.boundingRect(contour)
                 objects.append((x, y, w, h))
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -748,6 +755,7 @@ topics:
             if cv2.contourArea(contour) >= 100:
                 x, y, w, h = cv2.boundingRect(contour)
                 objects.append((x, y, w, h))
+
         ```
 
         **Навіщо саме це тут:** Фільтрація за площею перетворює сирий набір
@@ -763,12 +771,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Чому результат
-        findContours потрібно додатково фільтрувати?","options":["Він завжди
-        повертає рівно один контур","Контури можуть описувати шум або небажані
-        області","Contours не мають координат","Щоб перетворити їх на
-        аудіо"],"answer":1,"explanation":"Алгоритм знаходить геометричні межі
-        маски, але не знає семантики потрібного об'єкта."}
+        {"type":"prediction","lang":"python","question":"Чому результат findContours потрібно додатково фільтрувати?","options":["Він завжди повертає рівно один контур","Контури можуть описувати шум або небажані області","Contours не мають координат","Щоб перетворити їх на аудіо"],"answer":1,"explanation":"Алгоритм знаходить геометричні межі маски, але не знає семантики потрібного об'єкта."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Чому результат findContours потрібно додатково фільтрувати?","options":["Він завжди повертає рівно один контур","Контури можуть описувати шум або небажані області","Contours не мають координат","Щоб перетворити їх на аудіо"],"answer":1,"explanation":"Алгоритм знаходить геометричні межі маски, але не знає семантики потрібного об'єкта."}]}
 
         ```
 
@@ -876,12 +885,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що обов'язково має бути
-        узгодженим для порівняння гістограм?","options":["Лише назва
-        файлу","Preprocessing, bins і нормалізація","Тільки розмір
-        Python-файлу","Мова програмування
-        клієнта"],"answer":1,"explanation":"Різні bins або масштаби можуть
-        змінити distance ще до реальної оцінки схожості."}
+        {"type":"prediction","lang":"python","question":"Що обов'язково має бути узгодженим для порівняння гістограм?","options":["Лише назва файлу","Preprocessing, bins і нормалізація","Тільки розмір Python-файлу","Мова програмування клієнта"],"answer":1,"explanation":"Різні bins або масштаби можуть змінити distance ще до реальної оцінки схожості."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що обов'язково має бути узгодженим для порівняння гістограм?","options":["Лише назва файлу","Preprocessing, bins і нормалізація","Тільки розмір Python-файлу","Мова програмування клієнта"],"answer":1,"explanation":"Різні bins або масштаби можуть змінити distance ще до реальної оцінки схожості."}]}
 
         ```
 
@@ -923,6 +933,7 @@ topics:
 
         if prediction['confidence'] >= 0.8:
             print(prediction['label'], prediction['box'])
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -966,6 +977,7 @@ topics:
 
         if prediction['confidence'] >= 0.8:
             print(prediction['label'], prediction['box'])
+
         ```
 
         **Навіщо саме це тут:** Навіть спрощений detection-результат має клас,
@@ -981,12 +993,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Яка відповідь найкраще
-        описує segmentation?","options":["Одна мітка для всього кадру","Bounding
-        box для кожного кандидата","Маска, що позначає належність
-        пікселів","Лише середній колір
-        зображення"],"answer":2,"explanation":"Segmentation повертає просторово
-        деталізоване представлення, зазвичай маску на рівні пікселів."}
+        {"type":"prediction","lang":"python","question":"Яка відповідь найкраще описує segmentation?","options":["Одна мітка для всього кадру","Bounding box для кожного кандидата","Маска, що позначає належність пікселів","Лише середній колір зображення"],"answer":2,"explanation":"Segmentation повертає просторово деталізоване представлення, зазвичай маску на рівні пікселів."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Яка відповідь найкраще описує segmentation?","options":["Одна мітка для всього кадру","Bounding box для кожного кандидата","Маска, що позначає належність пікселів","Лише середній колір зображення"],"answer":2,"explanation":"Segmentation повертає просторово деталізоване представлення, зазвичай маску на рівні пікселів."}]}
 
         ```
 
@@ -1096,11 +1109,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що вимірює
-        recall?","options":["Частку знайдених позитивних випадків серед усіх
-        справжніх позитивних","Розмір зображення в байтах","Середню яскравість
-        кадру","Кількість рядків моделі"],"answer":0,"explanation":"Recall
-        показує, скільки реальних позитивних випадків система не пропустила."}
+        {"type":"prediction","lang":"python","question":"Що вимірює recall?","options":["Частку знайдених позитивних випадків серед усіх справжніх позитивних","Розмір зображення в байтах","Середню яскравість кадру","Кількість рядків моделі"],"answer":0,"explanation":"Recall показує, скільки реальних позитивних випадків система не пропустила."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що вимірює recall?","options":["Частку знайдених позитивних випадків серед усіх справжніх позитивних","Розмір зображення в байтах","Середню яскравість кадру","Кількість рядків моделі"],"answer":0,"explanation":"Recall показує, скільки реальних позитивних випадків система не пропустила."}]}
 
         ```
 
@@ -1128,13 +1143,16 @@ topics:
         Для кольорового BGR-зображення OpenCV типово має shape `(height, width, 3)` і `uint8` у діапазоні 0–255. Перетворення в float32 змінює пам’ять і дозволяє нормалізацію, але не змінює кількість пікселів.
 
         ### Мінімальний приклад коду
+
         ```python
+
         import numpy as np
 
         image = np.zeros((2, 3, 3), dtype=np.uint8)
         print(image.shape)
         print(image.dtype)
         print(int(image.nbytes))
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1144,7 +1162,9 @@ topics:
         Яке shape буде у grayscale `(2, 3)`? Що зміниться в nbytes після `.astype(np.float32)`?
 
         ```interactive
+
         {"type":"prediction","lang":"python","question":"Що описує третя вісь `(height, width, 3)`?","code":"import numpy as np\n\nimage = np.zeros((2, 3, 3), dtype=np.uint8)\nprint(image.shape)\nprint(image.dtype)\nprint(int(image.nbytes))","options":["Канали кольору кожного пікселя","Кількість класів моделі","Кількість кадрів відео"],"answer":0,"explanation":"Третя вісь містить значення каналів; у BGR зображення має три канали."}
+
         ```
 
         ### Як змінюється поведінка
@@ -1154,13 +1174,16 @@ topics:
         плутати width і height; вважати RGB замість BGR; ігнорувати dtype; нормалізувати двічі; копіювати великі arrays без оцінки пам’яті.
 
         ### На практиці
+
         ```python
+
         import numpy as np
 
         image = np.zeros((2, 3, 3), dtype=np.uint8)
         print(image.shape)
         print(image.dtype)
         print(int(image.nbytes))
+
         ```
 
         **Навіщо саме цей фрагмент:** фрагмент формує числовий контракт, на який спираються всі наступні OpenCV-операції.
@@ -1229,14 +1252,7 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Чого гістограма не
-        зберігає?","code":"import cv2\nimport numpy as np\n\ngray =
-        np.array([[0, 0, 100], [100, 200, 255]], dtype=np.uint8)\nhist, _ =
-        np.histogram(gray, bins=4, range=(0,
-        256))\nprint(hist.tolist())","options":["Просторове розташування
-        пікселів","Кількість пікселів у bins","Діапазон
-        інтенсивностей"],"answer":0,"explanation":"Histogram стискає просторову
-        структуру до розподілу значень."}
+        {"type":"prediction","lang":"python","question":"Чого гістограма не зберігає?","code":"import cv2\nimport numpy as np\n\ngray = np.array([[0, 0, 100], [100, 200, 255]], dtype=np.uint8)\nhist, _ = np.histogram(gray, bins=4, range=(0, 256))\nprint(hist.tolist())","options":["Просторове розташування пікселів","Кількість пікселів у bins","Діапазон інтенсивностей"],"answer":0,"explanation":"Histogram стискає просторову структуру до розподілу значень."}
 
         ```
 
@@ -1344,15 +1360,7 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Яка комбінація прибирає
-        маленький світлий шум?","code":"import cv2\nimport numpy as np\n\nmask =
-        np.array([[0, 255, 0], [255, 255, 255], [0, 255, 0]],
-        dtype=np.uint8)\nkernel = np.ones((3, 3), dtype=np.uint8)\neroded =
-        cv2.erode(mask, kernel,
-        iterations=1)\nprint(int(eroded.sum()))","options":["Opening: erosion
-        потім dilation","Лише зміна кольорового простору","Збільшення JPEG
-        quality"],"answer":0,"explanation":"Opening спочатку прибирає малі
-        області erosion, а потім повертає форму основних об’єктів dilation."}
+        {"type":"prediction","lang":"python","question":"Яка комбінація прибирає маленький світлий шум?","code":"import cv2\nimport numpy as np\n\nmask = np.array([[0, 255, 0], [255, 255, 255], [0, 255, 0]], dtype=np.uint8)\nkernel = np.ones((3, 3), dtype=np.uint8)\neroded = cv2.erode(mask, kernel, iterations=1)\nprint(int(eroded.sum()))","options":["Opening: erosion потім dilation","Лише зміна кольорового простору","Збільшення JPEG quality"],"answer":0,"explanation":"Opening спочатку прибирає малі області erosion, а потім повертає форму основних об’єктів dilation."}
 
         ```
 
@@ -1463,16 +1471,7 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що є типовим обмеженням
-        template matching?","code":"import cv2\nimport numpy as np\n\nimage =
-        np.zeros((20, 20), dtype=np.uint8)\ntemplate = np.ones((3, 3),
-        dtype=np.uint8) * 255\nimage[8:11, 12:15] = template\nresult =
-        cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)\n_, score, _,
-        point = cv2.minMaxLoc(result)\nprint(round(float(score), 2),
-        point)","options":["Чутливість до масштабу, повороту та
-        освітлення","Відсутність будь-якого числового score","Неможливість
-        працювати з NumPy"],"answer":0,"explanation":"Pixel-level comparison не
-        має інваріантності складнішої моделі."}
+        {"type":"prediction","lang":"python","question":"Що є типовим обмеженням template matching?","code":"import cv2\nimport numpy as np\n\nimage = np.zeros((20, 20), dtype=np.uint8)\ntemplate = np.ones((3, 3), dtype=np.uint8) * 255\nimage[8:11, 12:15] = template\nresult = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)\n_, score, _, point = cv2.minMaxLoc(result)\nprint(round(float(score), 2), point)","options":["Чутливість до масштабу, повороту та освітлення","Відсутність будь-якого числового score","Неможливість працювати з NumPy"],"answer":0,"explanation":"Pixel-level comparison не має інваріантності складнішої моделі."}
 
         ```
 
@@ -1587,14 +1586,7 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що є важливим для
-        завершення відеопотоку?","code":"import cv2\n\ncap =
-        cv2.VideoCapture(\"sample.mp4\")\nframes = 0\nwhile frames < 3:\n    ok,
-        frame = cap.read()\n    if not ok:\n        break\n    frames +=
-        1\ncap.release()\nprint(frames)","options":["Перевірити success/read і
-        звільнити capture","Завжди чекати нескінченний цикл","Зберігати всі
-        кадри в RAM"],"answer":0,"explanation":"Стан джерела може змінитися,
-        тому цикл і resource cleanup мають бути явними."}
+        {"type":"prediction","lang":"python","question":"Що є важливим для завершення відеопотоку?","code":"import cv2\n\ncap = cv2.VideoCapture(\"sample.mp4\")\nframes = 0\nwhile frames < 3:\n    ok, frame = cap.read()\n    if not ok:\n        break\n    frames += 1\ncap.release()\nprint(frames)","options":["Перевірити success/read і звільнити capture","Завжди чекати нескінченний цикл","Зберігати всі кадри в RAM"],"answer":0,"explanation":"Стан джерела може змінитися, тому цикл і resource cleanup мають бути явними."}
 
         ```
 
@@ -1706,15 +1698,7 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що робить status у
-        tracking result?","code":"import numpy as np\n\nold = np.array([[[10.,
-        10.]], [[20., 10.]]], dtype=np.float32)\nnew = old + np.array([[[2.,
-        1.]], [[2., 1.]]], dtype=np.float32)\nstatus = np.array([[1], [0]],
-        dtype=np.uint8)\ntracked = new[status.ravel() ==
-        1]\nprint(tracked.reshape(-1, 2).tolist())","options":["Позначає, які
-        оцінки руху можна використовувати","Змінює BGR на RGB","Описує клас
-        об’єкта"],"answer":0,"explanation":"Status є валідністю окремої tracked
-        point, а не семантичною міткою."}
+        {"type":"prediction","lang":"python","question":"Що робить status у tracking result?","code":"import numpy as np\n\nold = np.array([[[10., 10.]], [[20., 10.]]], dtype=np.float32)\nnew = old + np.array([[[2., 1.]], [[2., 1.]]], dtype=np.float32)\nstatus = np.array([[1], [0]], dtype=np.uint8)\ntracked = new[status.ravel() == 1]\nprint(tracked.reshape(-1, 2).tolist())","options":["Позначає, які оцінки руху можна використовувати","Змінює BGR на RGB","Описує клас об’єкта"],"answer":0,"explanation":"Status є валідністю окремої tracked point, а не семантичною міткою."}
 
         ```
 
@@ -1818,16 +1802,7 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Навіщо потрібні різні
-        ракурси шахівниці?","code":"import numpy as np\n\nobject_points =
-        np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]],
-        dtype=np.float32)\nimage_points = np.array([[10, 10], [20, 10], [10,
-        20]], dtype=np.float32)\nprint(object_points.shape,
-        image_points.shape)","options":["Щоб параметри були визначені за
-        різноманітними геометричними спостереженнями","Щоб збільшити яскравість
-        зображення","Щоб замінити distortion на
-        segmentation"],"answer":0,"explanation":"Одноманітні correspondence
-        дають слабко визначену модель і погано узагальнюються."}
+        {"type":"prediction","lang":"python","question":"Навіщо потрібні різні ракурси шахівниці?","code":"import numpy as np\n\nobject_points = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=np.float32)\nimage_points = np.array([[10, 10], [20, 10], [10, 20]], dtype=np.float32)\nprint(object_points.shape, image_points.shape)","options":["Щоб параметри були визначені за різноманітними геометричними спостереженнями","Щоб збільшити яскравість зображення","Щоб замінити distortion на segmentation"],"answer":0,"explanation":"Одноманітні correspondence дають слабко визначену модель і погано узагальнюються."}
 
         ```
 
@@ -1931,14 +1906,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що не можна робити з
-        test set?","code":"import cv2\nimport numpy as np\n\nimage =
-        np.arange(9, dtype=np.uint8).reshape(3, 3)\nflipped = cv2.flip(image,
-        1)\nprint(flipped.tolist())","options":["Підбирати
-        augmentation/threshold на його відповідях і потім називати оцінку
-        незалежною","Перевіряти фінальну якість один раз","Зберігати його окремо
-        від train"],"answer":0,"explanation":"Test set має залишатися незалежним
-        для чесної оцінки узагальнення."}
+        {"type":"prediction","lang":"python","question":"Який масив утворить горизонтальне віддзеркалення?","code":"import numpy as np\nimage = np.array([[1, 2], [3, 4]])\nflipped = np.fliplr(image)\nprint(flipped.tolist())","options":["[[2, 1], [4, 3]]","[[3, 4], [1, 2]]","[[1, 2], [3, 4]]"],"answer":0,"explanation":"Горизонтальне віддзеркалення змінює порядок стовпців у кожному рядку."}
+
+        ```
+
+        ```interactive
+
+        {"type":"spot-the-bug","lang":"python","question":"Який рядок використовує відкладений тестовий набір для налаштування порога?","lines":["best_threshold = thresholds[0]","best_score = -1.0","for threshold in thresholds:","    score = evaluate(test_images, test_labels, threshold)","    if score > best_score:","        best_score = score","        best_threshold = threshold"],"buggyLine":4,"explanation":"Обирай поріг на валідаційних даних, а вибраний поріг один раз оцінюй на недоторканому тестовому наборі."}
 
         ```
 
@@ -2046,17 +2020,7 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що має зробити batch із
-        битим input?","code":"from pathlib import Path\n\nfiles =
-        sorted(Path(\"samples\").glob(\"*.png\"))\nsummary = {\"processed\": 0,
-        \"failed\": 0}\nfor path in files:\n    try:\n        if
-        path.stat().st_size == 0:\n            raise ValueError(\"empty
-        file\")\n        summary[\"processed\"] += 1\n    except (OSError,
-        ValueError):\n        summary[\"failed\"] +=
-        1\nprint(summary)","options":["Зафіксувати файл як failed і продовжити,
-        якщо policy це дозволяє","Мовчки позначити його processed","Видалити всі
-        результати batch"],"answer":0,"explanation":"Ізоляція помилки та явний
-        summary роблять pipeline керованим."}
+        {"type":"prediction","lang":"python","question":"Що має зробити batch із битим input?","code":"from pathlib import Path\n\nfiles = sorted(Path(\"samples\").glob(\"*.png\"))\nsummary = {\"processed\": 0, \"failed\": 0}\nfor path in files:\n    try:\n        if path.stat().st_size == 0:\n            raise ValueError(\"empty file\")\n        summary[\"processed\"] += 1\n    except (OSError, ValueError):\n        summary[\"failed\"] += 1\nprint(summary)","options":["Зафіксувати файл як failed і продовжити, якщо policy це дозволяє","Мовчки позначити його processed","Видалити всі результати batch"],"answer":0,"explanation":"Ізоляція помилки та явний summary роблять pipeline керованим."}
 
         ```
 

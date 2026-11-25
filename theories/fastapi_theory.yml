@@ -45,6 +45,7 @@ topics:
 
         def health():
             return {"status": "ok"}
+
         ```
 
         Вивід для контрольного запиту:
@@ -72,14 +73,7 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що є результатом
-        виклику GET /health?","code":"from fastapi import FastAPI\n\napp =
-        FastAPI(title=\"Reading API\")\n\n@app.get(\"/health\")\ndef
-        health():\n    return {\"status\": \"ok\"}","options":["JSON-відповідь
-        {status: ok}","Рядок надрукований через stdout","422, бо endpoint не
-        читає stdin","FastAPI сам запускає функцію лише після відкриття
-        /docs"],"answer":0,"explanation":"Клієнт отримує JSON-відповідь від
-        route. `print()` тут не потрібен: endpoint повертає дані фреймворку."}
+        {"type":"prediction","lang":"python","question":"Що є результатом виклику GET /health?","code":"from fastapi import FastAPI\n\napp = FastAPI(title=\"Reading API\")\n\n@app.get(\"/health\")\ndef health():\n    return {\"status\": \"ok\"}","options":["JSON-відповідь {status: ok}","Рядок надрукований через stdout","422, бо endpoint не читає stdin","FastAPI сам запускає функцію лише після відкриття /docs"],"answer":0,"explanation":"Клієнт отримує JSON-відповідь від route. `print()` тут не потрібен: endpoint повертає дані фреймворку."}
 
         ```
 
@@ -110,6 +104,7 @@ topics:
 
         def health():
             return {"status": "ok"}
+
         ```
 
         **Навіщо саме це тут:** health endpoint дає найменший корисний контракт:
@@ -152,7 +147,9 @@ topics:
         FastAPI зберігає окрему path operation для кожної пари метод+шлях. Два однакові шляхи з різними методами можуть мирно співіснувати. Коли клієнт надсилає запит, спочатку вибирається операція, а потім виконуються параметризація, залежності, валідація та handler. Метод не змінює дані автоматично — це відповідальність вашої функції.
 
         ### Мінімальний приклад коду
+
         ```python
+
         from fastapi import FastAPI, status
 
         app = FastAPI()
@@ -164,11 +161,15 @@ topics:
         @app.post("/books", status_code=status.HTTP_201_CREATED)
         def create_book():
             return {"id": 2, "title": "Solaris"}
+
         ```
 
         Вивід для контрольного запиту:
+
         ```text
+
         GET /books → 200; POST /books → 201
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -178,7 +179,15 @@ topics:
         Яка операція виконається для POST /books і чому відповідь не повинна мати статус 200 за замовчуванням?
 
         ```interactive
-        {"type":"prediction","lang":"python","question":"Який метод найприродніше використовувати для створення нового ресурсу?","code":"from fastapi import FastAPI, status\n\napp = FastAPI()\n\n@app.get(\"/books\")\ndef list_books():\n    return [{\"id\": 1, \"title\": \"Dune\"}]\n\n@app.post(\"/books\", status_code=status.HTTP_201_CREATED)\ndef create_book():\n    return {\"id\": 2, \"title\": \"Solaris\"}","options":["POST","GET","DELETE","HEAD"],"answer":0,"explanation":"POST додає новий ресурс до колекції. GET читає, DELETE видаляє, а HEAD перевіряє метадані відповіді."}
+
+        {"type":"prediction","lang":"python","question":"Який метод найприродніше використовувати для створення нового ресурсу?","options":["POST","GET","DELETE","HEAD"],"answer":0,"code":"from fastapi import FastAPI, status\n\napp = FastAPI()\n\n@app.get(\"/books\")\ndef list_books():\n    return [{\"id\": 1, \"title\": \"Dune\"}]\n\n@app.post(\"/books\", status_code=status.HTTP_201_CREATED)\ndef create_book():\n    return {\"id\": 2, \"title\": \"Solaris\"}","explanation":"POST додає новий ресурс до колекції. GET читає, DELETE видаляє, а HEAD перевіряє метадані відповіді."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Який метод найприродніше використовувати для створення нового ресурсу?","options":["POST","GET","DELETE","HEAD"],"answer":0,"code":"from fastapi import FastAPI, status\n\napp = FastAPI()\n\n@app.get(\"/books\")\ndef list_books():\n    return [{\"id\": 1, \"title\": \"Dune\"}]\n\n@app.post(\"/books\", status_code=status.HTTP_201_CREATED)\ndef create_book():\n    return {\"id\": 2, \"title\": \"Solaris\"}","explanation":"POST додає новий ресурс до колекції. GET читає, DELETE видаляє, а HEAD перевіряє метадані відповіді."}]}
+
         ```
 
         ### Як змінюється поведінка
@@ -189,7 +198,9 @@ topics:
 
         ### На практиці
         Цей фрагмент показує, де конструкція з теми стає частиною справжнього API:
+
         ```python
+
         from fastapi import FastAPI, status
 
         app = FastAPI()
@@ -201,6 +212,7 @@ topics:
         @app.post("/books", status_code=status.HTTP_201_CREATED)
         def create_book():
             return {"id": 2, "title": "Solaris"}
+
         ```
 
         **Навіщо саме це тут:** Пара маршрутів колекції показує, як фреймворк розрізняє операції ще до виконання Python-функції.
@@ -258,6 +270,7 @@ topics:
             session_id: str | None = Cookie(default=None),
         ):
             return {"id": book_id, "limit": limit, "user_agent": user_agent, "session": session_id}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -275,18 +288,7 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Звідки FastAPI візьме
-        значення `limit` у цьому прикладі?","code":"from fastapi import Cookie,
-        FastAPI, Header\n\napp =
-        FastAPI()\n\n@app.get(\"/books/{book_id}\")\ndef
-        read_book(\n    book_id: int,\n    limit: int = 20,\n    user_agent: str
-        | None = Header(default=None),\n    session_id: str | None =
-        Cookie(default=None),\n):\n    return {\"id\": book_id, \"limit\":
-        limit, \"user_agent\": user_agent, \"session\":
-        session_id}","options":["З query-параметра URL або з default 20","З body
-        JSON","З назви cookie limit","Із stdin
-        процесу"],"answer":0,"explanation":"Параметр не є частиною path і не має
-        спеціальної декларації Body/Header/Cookie, тому він належить query."}
+        {"type":"prediction","lang":"python","question":"Звідки FastAPI візьме значення `limit` у цьому прикладі?","code":"from fastapi import Cookie, FastAPI, Header\n\napp = FastAPI()\n\n@app.get(\"/books/{book_id}\")\ndef read_book(\n    book_id: int,\n    limit: int = 20,\n    user_agent: str | None = Header(default=None),\n    session_id: str | None = Cookie(default=None),\n):\n    return {\"id\": book_id, \"limit\": limit, \"user_agent\": user_agent, \"session\": session_id}","options":["З query-параметра URL або з default 20","З body JSON","З назви cookie limit","Із stdin процесу"],"answer":0,"explanation":"Параметр не є частиною path і не має спеціальної декларації Body/Header/Cookie, тому він належить query."}
 
         ```
 
@@ -323,6 +325,7 @@ topics:
             session_id: str | None = Cookie(default=None),
         ):
             return {"id": book_id, "limit": limit, "user_agent": user_agent, "session": session_id}
+
         ```
 
         **Навіщо саме це тут:** Один endpoint демонструє чотири канали вводу,
@@ -391,6 +394,7 @@ topics:
 
         def create_book(book: BookCreate):
             return {"title": book.title, "pages": book.pages}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -408,17 +412,7 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що станеться, якщо поле
-        `pages` прийде як рядок `many`?","code":"from fastapi import
-        FastAPI\nfrom pydantic import BaseModel\n\nclass
-        BookCreate(BaseModel):\n    title: str\n    pages: int\n\napp =
-        FastAPI()\n\n@app.post(\"/books\")\ndef create_book(book:
-        BookCreate):\n    return {\"title\": book.title, \"pages\":
-        book.pages}","options":["FastAPI відхилить запит до виконання
-        handler","Python мовчки збереже many як int","Поле буде видалено","Запит
-        прочитає many зі stdin"],"answer":0,"explanation":"Pydantic не може
-        перетворити `many` на ціле число, тому FastAPI повертає помилку
-        валідації 422."}
+        {"type":"prediction","lang":"python","question":"Що станеться, якщо поле `pages` прийде як рядок `many`?","code":"from fastapi import FastAPI\nfrom pydantic import BaseModel\n\nclass BookCreate(BaseModel):\n    title: str\n    pages: int\n\napp = FastAPI()\n\n@app.post(\"/books\")\ndef create_book(book: BookCreate):\n    return {\"title\": book.title, \"pages\": book.pages}","options":["FastAPI відхилить запит до виконання handler","Python мовчки збереже many як int","Поле буде видалено","Запит прочитає many зі stdin"],"answer":0,"explanation":"Pydantic не може перетворити `many` на ціле число, тому FastAPI повертає помилку валідації 422."}
 
         ```
 
@@ -456,6 +450,7 @@ topics:
 
         def create_book(book: BookCreate):
             return {"title": book.title, "pages": book.pages}
+
         ```
 
         **Навіщо саме це тут:** Модель показує межу між зовнішнім JSON і
@@ -523,6 +518,7 @@ topics:
                 if not value:
                     raise ValueError("title must not be blank")
                 return value
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -540,19 +536,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Яку проблему вирішує
-        `Field(gt=0)` для pages?","code":"from pydantic import BaseModel, Field,
-        field_validator\n\nclass BookCreate(BaseModel):\n    title: str =
-        Field(min_length=1, max_length=200)\n    pages: int = Field(gt=0,
-        le=10000)\n\n    @field_validator(\"title\")\n    @classmethod\n    def
-        title_is_not_blank(cls, value: str) -> str:\n        value =
-        value.strip()\n        if not value:\n            raise
-        ValueError(\"title must not be blank\")\n        return
-        value","options":["Не дозволяє нуль і від’ємні значення ще до
-        handler","Автоматично записує сторінки в БД","Перевіряє, що користувач є
-        адміністратором","Змінює HTTP-метод на
-        POST"],"answer":0,"explanation":"gt=0 є обмеженням вхідної моделі.
-        Збереження та авторизація залишаються окремими шарами."}
+        {"type":"prediction","lang":"python","question":"Яку проблему вирішує `Field(gt=0)` для pages?","options":["Не дозволяє нуль і від’ємні значення ще до handler","Автоматично записує сторінки в БД","Перевіряє, що користувач є адміністратором","Змінює HTTP-метод на POST"],"answer":0,"code":"from pydantic import BaseModel, Field, field_validator\n\nclass BookCreate(BaseModel):\n    title: str = Field(min_length=1, max_length=200)\n    pages: int = Field(gt=0, le=10000)\n\n    @field_validator(\"title\")\n    @classmethod\n    def title_is_not_blank(cls, value: str) -> str:\n        value = value.strip()\n        if not value:\n            raise ValueError(\"title must not be blank\")\n        return value","explanation":"gt=0 є обмеженням вхідної моделі. Збереження та авторизація залишаються окремими шарами."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Яку проблему вирішує `Field(gt=0)` для pages?","options":["Не дозволяє нуль і від’ємні значення ще до handler","Автоматично записує сторінки в БД","Перевіряє, що користувач є адміністратором","Змінює HTTP-метод на POST"],"answer":0,"code":"from pydantic import BaseModel, Field, field_validator\n\nclass BookCreate(BaseModel):\n    title: str = Field(min_length=1, max_length=200)\n    pages: int = Field(gt=0, le=10000)\n\n    @field_validator(\"title\")\n    @classmethod\n    def title_is_not_blank(cls, value: str) -> str:\n        value = value.strip()\n        if not value:\n            raise ValueError(\"title must not be blank\")\n        return value","explanation":"gt=0 є обмеженням вхідної моделі. Збереження та авторизація залишаються окремими шарами."}]}
 
         ```
 
@@ -589,6 +579,7 @@ topics:
                 if not value:
                     raise ValueError("title must not be blank")
                 return value
+
         ```
 
         **Навіщо саме це тут:** Невеликі Field-обмеження дають API точний
@@ -656,6 +647,7 @@ topics:
 
         def get_user(user_id: int):
             return {"id": user_id, "email": "ana@example.com", "password_hash": "never-return"}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -672,18 +664,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Чому response_model
-        важливий, навіть якщо handler уже повертає словник?","code":"from
-        fastapi import FastAPI\nfrom pydantic import BaseModel\n\nclass
-        UserOut(BaseModel):\n    id: int\n    email: str\n\napp =
-        FastAPI()\n\n@app.get(\"/users/{user_id}\", response_model=UserOut)\ndef
-        get_user(user_id: int):\n    return {\"id\": user_id, \"email\":
-        \"ana@example.com\", \"password_hash\":
-        \"never-return\"}","options":["Він фіксує й перевіряє публічний контракт
-        та може відфільтрувати поля","Він запускає SQL-запит замість
-        handler","Він шифрує всі значення","Він вимикає
-        OpenAPI"],"answer":0,"explanation":"Response model контролює форму,
-        серіалізацію і межу даних між сервером та клієнтом."}
+        {"type":"prediction","lang":"python","question":"Чому response_model важливий, навіть якщо handler уже повертає словник?","options":["Він фіксує й перевіряє публічний контракт та може відфільтрувати поля","Він запускає SQL-запит замість handler","Він шифрує всі значення","Він вимикає OpenAPI"],"answer":0,"code":"from fastapi import FastAPI\nfrom pydantic import BaseModel\n\nclass UserOut(BaseModel):\n    id: int\n    email: str\n\napp = FastAPI()\n\n@app.get(\"/users/{user_id}\", response_model=UserOut)\ndef get_user(user_id: int):\n    return {\"id\": user_id, \"email\": \"ana@example.com\", \"password_hash\": \"never-return\"}","explanation":"Response model контролює форму, серіалізацію і межу даних між сервером та клієнтом."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Чому response_model важливий, навіть якщо handler уже повертає словник?","options":["Він фіксує й перевіряє публічний контракт та може відфільтрувати поля","Він запускає SQL-запит замість handler","Він шифрує всі значення","Він вимикає OpenAPI"],"answer":0,"code":"from fastapi import FastAPI\nfrom pydantic import BaseModel\n\nclass UserOut(BaseModel):\n    id: int\n    email: str\n\napp = FastAPI()\n\n@app.get(\"/users/{user_id}\", response_model=UserOut)\ndef get_user(user_id: int):\n    return {\"id\": user_id, \"email\": \"ana@example.com\", \"password_hash\": \"never-return\"}","explanation":"Response model контролює форму, серіалізацію і межу даних між сервером та клієнтом."}]}
 
         ```
 
@@ -720,6 +707,7 @@ topics:
 
         def get_user(user_id: int):
             return {"id": user_id, "email": "ana@example.com", "password_hash": "never-return"}
+
         ```
 
         **Навіщо саме це тут:** Приклад показує безпечну межу між внутрішньою
@@ -784,6 +772,7 @@ topics:
             if book is None:
                 raise HTTPException(status_code=404, detail="Book not found")
             return book
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -800,16 +789,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Який статус відповідає
-        ситуації, коли ресурс із коректним id не існує?","code":"from fastapi
-        import FastAPI, HTTPException\n\napp =
-        FastAPI()\n\n@app.get(\"/books/{book_id}\")\ndef get_book(book_id:
-        int):\n    book = {1: {\"id\": 1, \"title\":
-        \"Dune\"}}.get(book_id)\n    if book is None:\n        raise
-        HTTPException(status_code=404, detail=\"Book not found\")\n    return
-        book","options":["404 Not Found","401 Unauthorized","422 Unprocessable
-        Entity","503 завжди"],"answer":0,"explanation":"Формат запиту
-        правильний, але ресурс відсутній — це 404."}
+        {"type":"prediction","lang":"python","question":"Який статус відповідає ситуації, коли ресурс із коректним id не існує?","options":["404 Not Found","401 Unauthorized","422 Unprocessable Entity","503 завжди"],"answer":0,"code":"from fastapi import FastAPI, HTTPException\n\napp = FastAPI()\n\n@app.get(\"/books/{book_id}\")\ndef get_book(book_id: int):\n    book = {1: {\"id\": 1, \"title\": \"Dune\"}}.get(book_id)\n    if book is None:\n        raise HTTPException(status_code=404, detail=\"Book not found\")\n    return book","explanation":"Формат запиту правильний, але ресурс відсутній — це 404."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Який статус відповідає ситуації, коли ресурс із коректним id не існує?","options":["404 Not Found","401 Unauthorized","422 Unprocessable Entity","503 завжди"],"answer":0,"code":"from fastapi import FastAPI, HTTPException\n\napp = FastAPI()\n\n@app.get(\"/books/{book_id}\")\ndef get_book(book_id: int):\n    book = {1: {\"id\": 1, \"title\": \"Dune\"}}.get(book_id)\n    if book is None:\n        raise HTTPException(status_code=404, detail=\"Book not found\")\n    return book","explanation":"Формат запиту правильний, але ресурс відсутній — це 404."}]}
 
         ```
 
@@ -843,6 +829,7 @@ topics:
             if book is None:
                 raise HTTPException(status_code=404, detail="Book not found")
             return book
+
         ```
 
         **Навіщо саме це тут:** 404 у найпростішому route формує правильну
@@ -912,6 +899,7 @@ topics:
 
         def list_books(page: Page):
             return page
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -928,17 +916,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що робить Depends у
-        цьому прикладі?","code":"from typing import Annotated\nfrom fastapi
-        import Depends, FastAPI\n\napp = FastAPI()\n\ndef pagination(limit: int
-        = 20, offset: int = 0):\n    return {\"limit\": min(limit, 100),
-        \"offset\": max(offset, 0)}\n\nPage = Annotated[dict,
-        Depends(pagination)]\n\n@app.get(\"/books\")\ndef list_books(page:
-        Page):\n    return page","options":["Просить FastAPI виконати pagination
-        і передати результат у route","Створює окремий HTTP-сервер","Зберігає
-        page у глобальній змінній","Перетворює GET на
-        POST"],"answer":0,"explanation":"Depends оголошує постачальника даних, а
-        фреймворк викликає його на запиті та інжектить результат."}
+        {"type":"prediction","lang":"python","question":"Що робить Depends у цьому прикладі?","options":["Просить FastAPI виконати pagination і передати результат у route","Створює окремий HTTP-сервер","Зберігає page у глобальній змінній","Перетворює GET на POST"],"answer":0,"code":"from typing import Annotated\nfrom fastapi import Depends, FastAPI\n\napp = FastAPI()\n\ndef pagination(limit: int = 20, offset: int = 0):\n    return {\"limit\": min(limit, 100), \"offset\": max(offset, 0)}\n\nPage = Annotated[dict, Depends(pagination)]\n\n@app.get(\"/books\")\ndef list_books(page: Page):\n    return page","explanation":"Depends оголошує постачальника даних, а фреймворк викликає його на запиті та інжектить результат."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що робить Depends у цьому прикладі?","options":["Просить FastAPI виконати pagination і передати результат у route","Створює окремий HTTP-сервер","Зберігає page у глобальній змінній","Перетворює GET на POST"],"answer":0,"code":"from typing import Annotated\nfrom fastapi import Depends, FastAPI\n\napp = FastAPI()\n\ndef pagination(limit: int = 20, offset: int = 0):\n    return {\"limit\": min(limit, 100), \"offset\": max(offset, 0)}\n\nPage = Annotated[dict, Depends(pagination)]\n\n@app.get(\"/books\")\ndef list_books(page: Page):\n    return page","explanation":"Depends оголошує постачальника даних, а фреймворк викликає його на запиті та інжектить результат."}]}
 
         ```
 
@@ -976,6 +960,7 @@ topics:
 
         def list_books(page: Page):
             return page
+
         ```
 
         **Навіщо саме це тут:** Пагінація — реальна повторювана потреба, на якій
@@ -1046,6 +1031,7 @@ topics:
 
         def report(connection: str = Depends(get_connection)):
             return {"connection": connection}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1062,19 +1048,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Яка частина yield
-        dependency призначена для звільнення ресурсу?","code":"from
-        collections.abc import Generator\nfrom fastapi import Depends,
-        FastAPI\n\napp = FastAPI()\n\ndef get_connection() -> Generator[str,
-        None, None]:\n    connection =
-        \"opened-connection\"\n    try:\n        yield
-        connection\n    finally:\n        connection =
-        \"closed-connection\"\n\n@app.get(\"/report\")\ndef report(connection:
-        str = Depends(get_connection)):\n    return {\"connection\":
-        connection}","options":["Код після yield у finally","Тип
-        Generator","Декоратор app.get","Тіло
-        JSON"],"answer":0,"explanation":"Код після yield є exit-фазою
-        dependency; finally робить її надійною при помилках."}
+        {"type":"prediction","lang":"python","question":"Яка частина yield dependency призначена для звільнення ресурсу?","options":["Код після yield у finally","Тип Generator","Декоратор app.get","Тіло JSON"],"answer":0,"code":"from collections.abc import Generator\nfrom fastapi import Depends, FastAPI\n\napp = FastAPI()\n\ndef get_connection() -> Generator[str, None, None]:\n    connection = \"opened-connection\"\n    try:\n        yield connection\n    finally:\n        connection = \"closed-connection\"\n\n@app.get(\"/report\")\ndef report(connection: str = Depends(get_connection)):\n    return {\"connection\": connection}","explanation":"Код після yield є exit-фазою dependency; finally робить її надійною при помилках."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Яка частина yield dependency призначена для звільнення ресурсу?","options":["Код після yield у finally","Тип Generator","Декоратор app.get","Тіло JSON"],"answer":0,"code":"from collections.abc import Generator\nfrom fastapi import Depends, FastAPI\n\napp = FastAPI()\n\ndef get_connection() -> Generator[str, None, None]:\n    connection = \"opened-connection\"\n    try:\n        yield connection\n    finally:\n        connection = \"closed-connection\"\n\n@app.get(\"/report\")\ndef report(connection: str = Depends(get_connection)):\n    return {\"connection\": connection}","explanation":"Код після yield є exit-фазою dependency; finally робить її надійною при помилках."}]}
 
         ```
 
@@ -1115,6 +1095,7 @@ topics:
 
         def report(connection: str = Depends(get_connection)):
             return {"connection": connection}
+
         ```
 
         **Навіщо саме це тут:** Навіть текстовий ресурс демонструє пару
@@ -1205,18 +1186,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що додає
-        `include_router` до локального маршруту `/{book_id}`?","code":"#
-        routers/books.py\nfrom fastapi import APIRouter\n\nrouter =
-        APIRouter(prefix=\"/books\",
-        tags=[\"books\"])\n\n@router.get(\"/{book_id}\")\ndef read_book(book_id:
-        int):\n    return {\"id\": book_id}\n\n# main.py\nfrom fastapi import
-        FastAPI\nfrom routers.books import router as books_router\n\napp =
-        FastAPI()\napp.include_router(books_router)","options":["Prefix /books і
-        реєстрацію операції в головному застосунку","Нову базу
-        даних","Автоматичний JWT","Окремий процес
-        Uvicorn"],"answer":0,"explanation":"include_router підключає вже описані
-        операції із загальними налаштуваннями."}
+        {"type":"prediction","lang":"python","question":"Що додає `include_router` до локального маршруту `/{book_id}`?","options":["Prefix /books і реєстрацію операції в головному застосунку","Нову базу даних","Автоматичний JWT","Окремий процес Uvicorn"],"answer":0,"code":"# routers/books.py\nfrom fastapi import APIRouter\n\nrouter = APIRouter(prefix=\"/books\", tags=[\"books\"])\n\n@router.get(\"/{book_id}\")\ndef read_book(book_id: int):\n    return {\"id\": book_id}\n\n# main.py\nfrom fastapi import FastAPI\nfrom routers.books import router as books_router\n\napp = FastAPI()\napp.include_router(books_router)","explanation":"include_router підключає вже описані операції із загальними налаштуваннями."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що додає `include_router` до локального маршруту `/{book_id}`?","options":["Prefix /books і реєстрацію операції в головному застосунку","Нову базу даних","Автоматичний JWT","Окремий процес Uvicorn"],"answer":0,"code":"# routers/books.py\nfrom fastapi import APIRouter\n\nrouter = APIRouter(prefix=\"/books\", tags=[\"books\"])\n\n@router.get(\"/{book_id}\")\ndef read_book(book_id: int):\n    return {\"id\": book_id}\n\n# main.py\nfrom fastapi import FastAPI\nfrom routers.books import router as books_router\n\napp = FastAPI()\napp.include_router(books_router)","explanation":"include_router підключає вже описані операції із загальними налаштуваннями."}]}
 
         ```
 
@@ -1300,7 +1276,9 @@ topics:
         Під час побудови схеми FastAPI читає path operations і Pydantic-моделі. `summary`, `description`, `tags` та response_model потрапляють у JSON-схему. Клієнтські генератори можуть використовувати її для SDK, але зміна поля або статусу є зміною контракту, яку треба версіювати й тестувати.
 
         ### Мінімальний приклад коду
+
         ```python
+
         from fastapi import FastAPI
 
         app = FastAPI(title="Library API", version="1.0.0")
@@ -1313,6 +1291,7 @@ topics:
         )
         def read_book(book_id: int):
             return {"id": book_id, "title": "Dune"}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1322,7 +1301,15 @@ topics:
         Перевірте, які частини фрагмента вплинуть на `/docs`, а які — на runtime-значення JSON.
 
         ```interactive
-        {"type":"prediction","lang":"python","question":"Що є головною користю OpenAPI у FastAPI?","code":"from fastapi import FastAPI\n\napp = FastAPI(title=\"Library API\", version=\"1.0.0\")\n\n@app.get(\n    \"/books/{book_id}\",\n    tags=[\"books\"],\n    summary=\"Read one book\",\n    response_description=\"The public book representation\",\n)\ndef read_book(book_id: int):\n    return {\"id\": book_id, \"title\": \"Dune\"}","options":["Єдиний опис контракту, з якого можна читати, тестувати й генерувати клієнтів","Автоматичне виправлення бізнес-логіки","Заміна бази даних","Шифрування HTTP без TLS"],"answer":0,"explanation":"OpenAPI описує інтерфейс. Воно не може довести, що бізнес-правило реалізоване правильно."}
+
+        {"type":"prediction","lang":"python","question":"Що є головною користю OpenAPI у FastAPI?","options":["Єдиний опис контракту, з якого можна читати, тестувати й генерувати клієнтів","Автоматичне виправлення бізнес-логіки","Заміна бази даних","Шифрування HTTP без TLS"],"answer":0,"code":"from fastapi import FastAPI\n\napp = FastAPI(title=\"Library API\", version=\"1.0.0\")\n\n@app.get(\n    \"/books/{book_id}\",\n    tags=[\"books\"],\n    summary=\"Read one book\",\n    response_description=\"The public book representation\",\n)\ndef read_book(book_id: int):\n    return {\"id\": book_id, \"title\": \"Dune\"}","explanation":"OpenAPI описує інтерфейс. Воно не може довести, що бізнес-правило реалізоване правильно."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що є головною користю OpenAPI у FastAPI?","options":["Єдиний опис контракту, з якого можна читати, тестувати й генерувати клієнтів","Автоматичне виправлення бізнес-логіки","Заміна бази даних","Шифрування HTTP без TLS"],"answer":0,"code":"from fastapi import FastAPI\n\napp = FastAPI(title=\"Library API\", version=\"1.0.0\")\n\n@app.get(\n    \"/books/{book_id}\",\n    tags=[\"books\"],\n    summary=\"Read one book\",\n    response_description=\"The public book representation\",\n)\ndef read_book(book_id: int):\n    return {\"id\": book_id, \"title\": \"Dune\"}","explanation":"OpenAPI описує інтерфейс. Воно не може довести, що бізнес-правило реалізоване правильно."}]}
+
         ```
 
         ### Як змінюється поведінка
@@ -1333,7 +1320,9 @@ topics:
 
         ### На практиці
         Цей фрагмент показує, де конструкція з теми стає частиною справжнього API:
+
         ```python
+
         from fastapi import FastAPI
 
         app = FastAPI(title="Library API", version="1.0.0")
@@ -1346,6 +1335,7 @@ topics:
         )
         def read_book(book_id: int):
             return {"id": book_id, "title": "Dune"}
+
         ```
 
         **Навіщо саме це тут:** Metadata змушує сформулювати API так, ніби його використовуватиме інша команда.
@@ -1401,6 +1391,7 @@ topics:
         async def slow():
             await asyncio.sleep(0.01)
             return {"ready": True}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1418,14 +1409,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що відбувається з event
-        loop під час `await asyncio.sleep(...)`?","code":"import asyncio\nfrom
-        fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get(\"/slow\")\nasync
-        def slow():\n    await asyncio.sleep(0.01)\n    return {\"ready\":
-        True}","options":["Він може обслуговувати інші готові задачі","Він
-        зупиняє весь процес","Він запускає новий сервер для кожного запиту","Він
-        читає stdin"],"answer":0,"explanation":"Awaitable sleep віддає керування
-        event loop до завершення очікування."}
+        {"type":"prediction","lang":"python","question":"Що відбувається з event loop під час `await asyncio.sleep(...)`?","options":["Він може обслуговувати інші готові задачі","Він зупиняє весь процес","Він запускає новий сервер для кожного запиту","Він читає stdin"],"answer":0,"code":"import asyncio\nfrom fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get(\"/slow\")\nasync def slow():\n    await asyncio.sleep(0.01)\n    return {\"ready\": True}","explanation":"Awaitable sleep віддає керування event loop до завершення очікування."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що відбувається з event loop під час `await asyncio.sleep(...)`?","options":["Він може обслуговувати інші готові задачі","Він зупиняє весь процес","Він запускає новий сервер для кожного запиту","Він читає stdin"],"answer":0,"code":"import asyncio\nfrom fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get(\"/slow\")\nasync def slow():\n    await asyncio.sleep(0.01)\n    return {\"ready\": True}","explanation":"Awaitable sleep віддає керування event loop до завершення очікування."}]}
 
         ```
 
@@ -1459,6 +1449,7 @@ topics:
         async def slow():
             await asyncio.sleep(0.01)
             return {"ready": True}
+
         ```
 
         **Навіщо саме це тут:** Маленький awaitable sleep дозволяє побачити
@@ -1541,6 +1532,7 @@ topics:
 
         def db_health(db: Session = Depends(get_db)):
             return {"session_ready": db is not None}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1557,24 +1549,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Чому session не варто
-        зберігати в глобальній змінній і використовувати для всіх
-        запитів?","code":"from collections.abc import Generator\nfrom fastapi
-        import Depends, FastAPI\nfrom sqlalchemy import create_engine\nfrom
-        sqlalchemy.orm import Session, sessionmaker\n\nengine =
-        create_engine(\"sqlite:///./app.db\",
-        connect_args={\"check_same_thread\": False})\nSessionLocal =
-        sessionmaker(bind=engine, autoflush=False, autocommit=False)\napp =
-        FastAPI()\n\ndef get_db() -> Generator[Session, None, None]:\n    db =
-        SessionLocal()\n    try:\n        yield
-        db\n    finally:\n        db.close()\n\n@app.get(\"/health/db\")\ndef
-        db_health(db: Session = Depends(get_db)):\n    return
-        {\"session_ready\": db is not None}","options":["Вона має транзакційний
-        стан і не є безпечною спільною session для різних запитів","FastAPI
-        забороняє глобальні змінні будь-якого типу","SQLAlchemy працює лише без
-        session","Тому що session читає
-        stdin"],"answer":0,"explanation":"Session має життєвий цикл і стан. Її
-        потрібно прив’язати до операції або request, а не до всього процесу."}
+        {"type":"prediction","lang":"python","question":"Чому session не варто зберігати в глобальній змінній і використовувати для всіх запитів?","options":["Вона має транзакційний стан і не є безпечною спільною session для різних запитів","FastAPI забороняє глобальні змінні будь-якого типу","SQLAlchemy працює лише без session","Тому що session читає stdin"],"answer":0,"code":"from collections.abc import Generator\nfrom fastapi import Depends, FastAPI\nfrom sqlalchemy import create_engine\nfrom sqlalchemy.orm import Session, sessionmaker\n\nengine = create_engine(\"sqlite:///./app.db\", connect_args={\"check_same_thread\": False})\nSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)\napp = FastAPI()\n\ndef get_db() -> Generator[Session, None, None]:\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/health/db\")\ndef db_health(db: Session = Depends(get_db)):\n    return {\"session_ready\": db is not None}","explanation":"Session має життєвий цикл і стан. Її потрібно прив’язати до операції або request, а не до всього процесу."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Чому session не варто зберігати в глобальній змінній і використовувати для всіх запитів?","options":["Вона має транзакційний стан і не є безпечною спільною session для різних запитів","FastAPI забороняє глобальні змінні будь-якого типу","SQLAlchemy працює лише без session","Тому що session читає stdin"],"answer":0,"code":"from collections.abc import Generator\nfrom fastapi import Depends, FastAPI\nfrom sqlalchemy import create_engine\nfrom sqlalchemy.orm import Session, sessionmaker\n\nengine = create_engine(\"sqlite:///./app.db\", connect_args={\"check_same_thread\": False})\nSessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)\napp = FastAPI()\n\ndef get_db() -> Generator[Session, None, None]:\n    db = SessionLocal()\n    try:\n        yield db\n    finally:\n        db.close()\n\n@app.get(\"/health/db\")\ndef db_health(db: Session = Depends(get_db)):\n    return {\"session_ready\": db is not None}","explanation":"Session має життєвий цикл і стан. Її потрібно прив’язати до операції або request, а не до всього процесу."}]}
 
         ```
 
@@ -1625,6 +1606,7 @@ topics:
 
         def db_health(db: Session = Depends(get_db)):
             return {"session_ready": db is not None}
+
         ```
 
         **Навіщо саме це тут:** Dependency показує правильне місце для session
@@ -1700,6 +1682,7 @@ topics:
 
         def create_book(data: BookCreate, db: Session = Depends(...)):
             return create_book_record(db, data)
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1716,22 +1699,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Який шар найкраще
-        відповідає за правило «книга з таким ISBN уже існує»?","code":"from
-        fastapi import APIRouter, Depends, status\nfrom pydantic import
-        BaseModel\nfrom sqlalchemy.orm import Session\n\nrouter =
-        APIRouter(prefix=\"/books\", tags=[\"books\"])\n\nclass
-        BookCreate(BaseModel):\n    title: str\n\nclass
-        BookOut(BookCreate):\n    id: int\n\ndef create_book_record(db: Session,
-        data: BookCreate) -> BookOut:\n    # У production тут працює repository
-        + commit у транзакції.\n    return BookOut(id=1,
-        title=data.title)\n\n@router.post(\"\", response_model=BookOut,
-        status_code=status.HTTP_201_CREATED)\ndef create_book(data: BookCreate,
-        db: Session = Depends(...)):\n    return create_book_record(db,
-        data)","options":["Service/domain layer із визначеним HTTP-перетворенням
-        помилки","Лише CSS клієнта","OpenAPI
-        UI","ASGI-сервер"],"answer":0,"explanation":"Унікальність є
-        бізнес-/даними правилом; route може перетворити відому помилку на 409."}
+        {"type":"prediction","lang":"python","question":"Який шар найкраще відповідає за правило «книга з таким ISBN уже існує»?","options":["Service/domain layer із визначеним HTTP-перетворенням помилки","Лише CSS клієнта","OpenAPI UI","ASGI-сервер"],"answer":0,"code":"from fastapi import APIRouter, Depends, status\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\n\nrouter = APIRouter(prefix=\"/books\", tags=[\"books\"])\n\nclass BookCreate(BaseModel):\n    title: str\n\nclass BookOut(BookCreate):\n    id: int\n\ndef create_book_record(db: Session, data: BookCreate) -> BookOut:\n    # У production тут працює repository + commit у транзакції.\n    return BookOut(id=1, title=data.title)\n\n@router.post(\"\", response_model=BookOut, status_code=status.HTTP_201_CREATED)\ndef create_book(data: BookCreate, db: Session = Depends(...)):\n    return create_book_record(db, data)","explanation":"Унікальність є бізнес-/даними правилом; route може перетворити відому помилку на 409."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Який шар найкраще відповідає за правило «книга з таким ISBN уже існує»?","options":["Service/domain layer із визначеним HTTP-перетворенням помилки","Лише CSS клієнта","OpenAPI UI","ASGI-сервер"],"answer":0,"code":"from fastapi import APIRouter, Depends, status\nfrom pydantic import BaseModel\nfrom sqlalchemy.orm import Session\n\nrouter = APIRouter(prefix=\"/books\", tags=[\"books\"])\n\nclass BookCreate(BaseModel):\n    title: str\n\nclass BookOut(BookCreate):\n    id: int\n\ndef create_book_record(db: Session, data: BookCreate) -> BookOut:\n    # У production тут працює repository + commit у транзакції.\n    return BookOut(id=1, title=data.title)\n\n@router.post(\"\", response_model=BookOut, status_code=status.HTTP_201_CREATED)\ndef create_book(data: BookCreate, db: Session = Depends(...)):\n    return create_book_record(db, data)","explanation":"Унікальність є бізнес-/даними правилом; route може перетворити відому помилку на 409."}]}
 
         ```
 
@@ -1777,6 +1751,7 @@ topics:
 
         def create_book(data: BookCreate, db: Session = Depends(...)):
             return create_book_record(db, data)
+
         ```
 
         **Навіщо саме це тут:** Фрагмент показує місце, де endpoint стає тонким
@@ -1842,6 +1817,7 @@ topics:
             sort: str = Query(default="title", pattern="^(title|created_at)$"),
         ):
             return {"items": [], "limit": limit, "offset": offset, "sort": sort}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1859,18 +1835,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Навіщо обмежувати
-        максимальний limit на рівні API?","code":"from fastapi import FastAPI,
-        Query\n\napp = FastAPI()\n\n@app.get(\"/books\")\ndef
-        list_books(\n    limit: int = Query(default=20, ge=1,
-        le=100),\n    offset: int = Query(default=0, ge=0),\n    sort: str =
-        Query(default=\"title\",
-        pattern=\"^(title|created_at)$\"),\n):\n    return {\"items\": [],
-        \"limit\": limit, \"offset\": offset, \"sort\": sort}","options":["Щоб
-        один запит не витягнув необмежений обсяг даних і не перевантажив
-        сервіс","Щоб OpenAPI не показував items","Щоб вимкнути pagination","Щоб
-        перетворити offset на id"],"answer":0,"explanation":"Обмеження є
-        захистом ресурсу й частиною передбачуваної продуктивності API."}
+        {"type":"prediction","lang":"python","question":"Навіщо обмежувати максимальний limit на рівні API?","options":["Щоб один запит не витягнув необмежений обсяг даних і не перевантажив сервіс","Щоб OpenAPI не показував items","Щоб вимкнути pagination","Щоб перетворити offset на id"],"answer":0,"code":"from fastapi import FastAPI, Query\n\napp = FastAPI()\n\n@app.get(\"/books\")\ndef list_books(\n    limit: int = Query(default=20, ge=1, le=100),\n    offset: int = Query(default=0, ge=0),\n    sort: str = Query(default=\"title\", pattern=\"^(title|created_at)$\"),\n):\n    return {\"items\": [], \"limit\": limit, \"offset\": offset, \"sort\": sort}","explanation":"Обмеження є захистом ресурсу й частиною передбачуваної продуктивності API."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Навіщо обмежувати максимальний limit на рівні API?","options":["Щоб один запит не витягнув необмежений обсяг даних і не перевантажив сервіс","Щоб OpenAPI не показував items","Щоб вимкнути pagination","Щоб перетворити offset на id"],"answer":0,"code":"from fastapi import FastAPI, Query\n\napp = FastAPI()\n\n@app.get(\"/books\")\ndef list_books(\n    limit: int = Query(default=20, ge=1, le=100),\n    offset: int = Query(default=0, ge=0),\n    sort: str = Query(default=\"title\", pattern=\"^(title|created_at)$\"),\n):\n    return {\"items\": [], \"limit\": limit, \"offset\": offset, \"sort\": sort}","explanation":"Обмеження є захистом ресурсу й частиною передбачуваної продуктивності API."}]}
 
         ```
 
@@ -1906,6 +1877,7 @@ topics:
             sort: str = Query(default="title", pattern="^(title|created_at)$"),
         ):
             return {"items": [], "limit": limit, "offset": offset, "sort": sort}
+
         ```
 
         **Навіщо саме це тут:** Фрагмент перетворює типову проблему «повернути
@@ -1970,6 +1942,7 @@ topics:
 
         def get_settings() -> Settings:
             return Settings()
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1986,16 +1959,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Де має жити
-        production-секрет DATABASE_URL?","code":"from functools import
-        lru_cache\nfrom pydantic_settings import BaseSettings\n\nclass
-        Settings(BaseSettings):\n    app_name: str = \"Library API\"\n    debug:
-        bool = False\n    database_url: str\n\n@lru_cache\ndef get_settings() ->
-        Settings:\n    return Settings()","options":["У secret/environment
-        configuration платформи, не в коді та не в логах","У response body
-        /health","У назві route","У
-        git-коментарі"],"answer":0,"explanation":"Секрети керуються середовищем
-        або secret manager; код містить лише назву налаштування."}
+        {"type":"prediction","lang":"python","question":"Де має жити production-секрет DATABASE_URL?","options":["У secret/environment configuration платформи, не в коді та не в логах","У response body /health","У назві route","У git-коментарі"],"answer":0,"code":"from functools import lru_cache\nfrom pydantic_settings import BaseSettings\n\nclass Settings(BaseSettings):\n    app_name: str = \"Library API\"\n    debug: bool = False\n    database_url: str\n\n@lru_cache\ndef get_settings() -> Settings:\n    return Settings()","explanation":"Секрети керуються середовищем або secret manager; код містить лише назву налаштування."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Де має жити production-секрет DATABASE_URL?","options":["У secret/environment configuration платформи, не в коді та не в логах","У response body /health","У назві route","У git-коментарі"],"answer":0,"code":"from functools import lru_cache\nfrom pydantic_settings import BaseSettings\n\nclass Settings(BaseSettings):\n    app_name: str = \"Library API\"\n    debug: bool = False\n    database_url: str\n\n@lru_cache\ndef get_settings() -> Settings:\n    return Settings()","explanation":"Секрети керуються середовищем або secret manager; код містить лише назву налаштування."}]}
 
         ```
 
@@ -2031,6 +2001,7 @@ topics:
 
         def get_settings() -> Settings:
             return Settings()
+
         ```
 
         **Навіщо саме це тут:** Settings-модель показує, як framework-проєкт
@@ -2104,6 +2075,7 @@ topics:
 
         def me(user: Annotated[dict, Depends(get_current_user)]):
             return user
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -2120,20 +2092,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що описує
-        authentication dependency?","code":"from typing import Annotated\nfrom
-        fastapi import Depends, FastAPI\nfrom fastapi.security import
-        OAuth2PasswordBearer\n\napp = FastAPI()\noauth2_scheme =
-        OAuth2PasswordBearer(tokenUrl=\"token\")\n\ndef get_current_user(token:
-        Annotated[str, Depends(oauth2_scheme)]):\n    if token !=
-        \"demo-token\":\n        raise ValueError(\"invalid token\")\n    return
-        {\"id\": 1, \"role\": \"reader\"}\n\n@app.get(\"/me\")\ndef me(user:
-        Annotated[dict, Depends(get_current_user)]):\n    return
-        user","options":["Вона встановлює, хто є користувачем, після перевірки
-        credential","Вона визначає CSS для /docs","Вона автоматично дає
-        admin-права","Вона створює таблиці
-        БД"],"answer":0,"explanation":"Authentication встановлює identity;
-        permission/role-перевірка є окремим authorization кроком."}
+        {"type":"prediction","lang":"python","question":"Що описує authentication dependency?","options":["Вона встановлює, хто є користувачем, після перевірки credential","Вона визначає CSS для /docs","Вона автоматично дає admin-права","Вона створює таблиці БД"],"answer":0,"code":"from typing import Annotated\nfrom fastapi import Depends, FastAPI\nfrom fastapi.security import OAuth2PasswordBearer\n\napp = FastAPI()\noauth2_scheme = OAuth2PasswordBearer(tokenUrl=\"token\")\n\ndef get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):\n    if token != \"demo-token\":\n        raise ValueError(\"invalid token\")\n    return {\"id\": 1, \"role\": \"reader\"}\n\n@app.get(\"/me\")\ndef me(user: Annotated[dict, Depends(get_current_user)]):\n    return user","explanation":"Authentication встановлює identity; permission/role-перевірка є окремим authorization кроком."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що описує authentication dependency?","options":["Вона встановлює, хто є користувачем, після перевірки credential","Вона визначає CSS для /docs","Вона автоматично дає admin-права","Вона створює таблиці БД"],"answer":0,"code":"from typing import Annotated\nfrom fastapi import Depends, FastAPI\nfrom fastapi.security import OAuth2PasswordBearer\n\napp = FastAPI()\noauth2_scheme = OAuth2PasswordBearer(tokenUrl=\"token\")\n\ndef get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):\n    if token != \"demo-token\":\n        raise ValueError(\"invalid token\")\n    return {\"id\": 1, \"role\": \"reader\"}\n\n@app.get(\"/me\")\ndef me(user: Annotated[dict, Depends(get_current_user)]):\n    return user","explanation":"Authentication встановлює identity; permission/role-перевірка є окремим authorization кроком."}]}
 
         ```
 
@@ -2175,6 +2140,7 @@ topics:
 
         def me(user: Annotated[dict, Depends(get_current_user)]):
             return user
+
         ```
 
         **Навіщо саме це тут:** Dependency показує правильний потік identity
@@ -2247,6 +2213,7 @@ topics:
 
         def books(user: Annotated[dict, Depends(require("books:read"))]):
             return {"viewer": user["id"], "items": []}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -2264,21 +2231,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Де повинна перевірятися
-        заборона на запис книги?","code":"from typing import Annotated\nfrom
-        fastapi import Depends, FastAPI, HTTPException\n\napp = FastAPI()\n\ndef
-        current_user():\n    return {\"id\": 1, \"permissions\":
-        {\"books:read\"}}\n\ndef require(permission: str):\n    def
-        checker(user: Annotated[dict, Depends(current_user)]):\n        if
-        permission not in user[\"permissions\"]:\n            raise
-        HTTPException(status_code=403, detail=\"Forbidden\")\n        return
-        user\n    return checker\n\n@app.get(\"/books\")\ndef books(user:
-        Annotated[dict, Depends(require(\"books:read\"))]):\n    return
-        {\"viewer\": user[\"id\"], \"items\": []}","options":["На сервері через
-        dependency/service до зміни даних","Лише в кнопці frontend","У назві
-        JSON-поля","Після успішного
-        commit"],"answer":0,"explanation":"Клієнтський UI не є довіреним
-        кордоном; сервер повинен відхилити заборонену операцію до зміни стану."}
+        {"type":"prediction","lang":"python","question":"Де повинна перевірятися заборона на запис книги?","options":["На сервері через dependency/service до зміни даних","Лише в кнопці frontend","У назві JSON-поля","Після успішного commit"],"answer":0,"code":"from typing import Annotated\nfrom fastapi import Depends, FastAPI, HTTPException\n\napp = FastAPI()\n\ndef current_user():\n    return {\"id\": 1, \"permissions\": {\"books:read\"}}\n\ndef require(permission: str):\n    def checker(user: Annotated[dict, Depends(current_user)]):\n        if permission not in user[\"permissions\"]:\n            raise HTTPException(status_code=403, detail=\"Forbidden\")\n        return user\n    return checker\n\n@app.get(\"/books\")\ndef books(user: Annotated[dict, Depends(require(\"books:read\"))]):\n    return {\"viewer\": user[\"id\"], \"items\": []}","explanation":"Клієнтський UI не є довіреним кордоном; сервер повинен відхилити заборонену операцію до зміни стану."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Де повинна перевірятися заборона на запис книги?","options":["На сервері через dependency/service до зміни даних","Лише в кнопці frontend","У назві JSON-поля","Після успішного commit"],"answer":0,"code":"from typing import Annotated\nfrom fastapi import Depends, FastAPI, HTTPException\n\napp = FastAPI()\n\ndef current_user():\n    return {\"id\": 1, \"permissions\": {\"books:read\"}}\n\ndef require(permission: str):\n    def checker(user: Annotated[dict, Depends(current_user)]):\n        if permission not in user[\"permissions\"]:\n            raise HTTPException(status_code=403, detail=\"Forbidden\")\n        return user\n    return checker\n\n@app.get(\"/books\")\ndef books(user: Annotated[dict, Depends(require(\"books:read\"))]):\n    return {\"viewer\": user[\"id\"], \"items\": []}","explanation":"Клієнтський UI не є довіреним кордоном; сервер повинен відхилити заборонену операцію до зміни стану."}]}
 
         ```
 
@@ -2321,6 +2280,7 @@ topics:
 
         def books(user: Annotated[dict, Depends(require("books:read"))]):
             return {"viewer": user["id"], "items": []}
+
         ```
 
         **Навіщо саме це тут:** Фабрика dependency демонструє, як одна політика
@@ -2361,7 +2321,9 @@ topics:
         Middleware отримує Request і `call_next`, може виконати код до та після наступного шару. CORS middleware відповідає на preflight і додає заголовки лише для дозволених origin. Request id має пройти через context/logging і повернутися заголовком. Не використовуйте `allow_origins=["*"]` разом із credentials.
 
         ### Мінімальний приклад коду
+
         ```python
+
         import time
         from uuid import uuid4
         from fastapi import FastAPI, Request
@@ -2383,6 +2345,7 @@ topics:
             response.headers["X-Request-ID"] = str(uuid4())
             response.headers["X-Response-Time"] = f"{time.perf_counter() - started:.4f}"
             return response
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -2392,7 +2355,15 @@ topics:
         CORS вплине на browser cross-origin поведінку, але не зупинить curl із серверним запитом.
 
         ```interactive
-        {"type":"prediction","lang":"python","question":"Що робить CORS middleware?","code":"import time\nfrom uuid import uuid4\nfrom fastapi import FastAPI, Request\nfrom fastapi.middleware.cors import CORSMiddleware\n\napp = FastAPI()\napp.add_middleware(\n    CORSMiddleware,\n    allow_origins=[\"https://app.example.com\"],\n    allow_credentials=True,\n    allow_methods=[\"GET\", \"POST\"],\n    allow_headers=[\"Authorization\", \"Content-Type\"],\n)\n\n@app.middleware(\"http\")\nasync def request_id(request: Request, call_next):\n    started = time.perf_counter()\n    response = await call_next(request)\n    response.headers[\"X-Request-ID\"] = str(uuid4())\n    response.headers[\"X-Response-Time\"] = f\"{time.perf_counter() - started:.4f}\"\n    return response","options":["Керує дозволеними browser origins і CORS-заголовками","Шифрує пароль у БД","Перевіряє всі permissions ресурсу","Запускає background worker"],"answer":0,"explanation":"CORS є browser-політикою доступу до cross-origin response; він не замінює server-side auth."}
+
+        {"type":"prediction","lang":"python","question":"Що робить CORS middleware?","options":["Керує дозволеними browser origins і CORS-заголовками","Шифрує пароль у БД","Перевіряє всі permissions ресурсу","Запускає background worker"],"answer":0,"code":"import time\nfrom uuid import uuid4\nfrom fastapi import FastAPI, Request\nfrom fastapi.middleware.cors import CORSMiddleware\n\napp = FastAPI()\napp.add_middleware(\n    CORSMiddleware,\n    allow_origins=[\"https://app.example.com\"],\n    allow_credentials=True,\n    allow_methods=[\"GET\", \"POST\"],\n    allow_headers=[\"Authorization\", \"Content-Type\"],\n)\n\n@app.middleware(\"http\")\nasync def request_id(request: Request, call_next):\n    started = time.perf_counter()\n    response = await call_next(request)\n    response.headers[\"X-Request-ID\"] = str(uuid4())\n    response.headers[\"X-Response-Time\"] = f\"{time.perf_counter() - started:.4f}\"\n    return response","explanation":"CORS є browser-політикою доступу до cross-origin response; він не замінює server-side auth."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що робить CORS middleware?","options":["Керує дозволеними browser origins і CORS-заголовками","Шифрує пароль у БД","Перевіряє всі permissions ресурсу","Запускає background worker"],"answer":0,"code":"import time\nfrom uuid import uuid4\nfrom fastapi import FastAPI, Request\nfrom fastapi.middleware.cors import CORSMiddleware\n\napp = FastAPI()\napp.add_middleware(\n    CORSMiddleware,\n    allow_origins=[\"https://app.example.com\"],\n    allow_credentials=True,\n    allow_methods=[\"GET\", \"POST\"],\n    allow_headers=[\"Authorization\", \"Content-Type\"],\n)\n\n@app.middleware(\"http\")\nasync def request_id(request: Request, call_next):\n    started = time.perf_counter()\n    response = await call_next(request)\n    response.headers[\"X-Request-ID\"] = str(uuid4())\n    response.headers[\"X-Response-Time\"] = f\"{time.perf_counter() - started:.4f}\"\n    return response","explanation":"CORS є browser-політикою доступу до cross-origin response; він не замінює server-side auth."}]}
+
         ```
 
         ### Як змінюється поведінка
@@ -2403,7 +2374,9 @@ topics:
 
         ### На практиці
         Цей фрагмент показує, де конструкція з теми стає частиною справжнього API:
+
         ```python
+
         import time
         from uuid import uuid4
         from fastapi import FastAPI, Request
@@ -2425,6 +2398,7 @@ topics:
             response.headers["X-Request-ID"] = str(uuid4())
             response.headers["X-Response-Time"] = f"{time.perf_counter() - started:.4f}"
             return response
+
         ```
 
         **Навіщо саме це тут:** Фрагмент демонструє глобальну технічну політику окремо від route та бізнес-логіки.
@@ -2481,6 +2455,7 @@ topics:
         def create_event(background_tasks: BackgroundTasks):
             background_tasks.add_task(write_audit, "event-created")
             return {"accepted": True}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -2497,21 +2472,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Коли варто використати
-        зовнішню чергу замість BackgroundTasks?","code":"from fastapi import
-        BackgroundTasks, FastAPI, status\n\napp = FastAPI()\n\ndef
-        write_audit(event: str) -> None:\n    with open(\"audit.log\", \"a\",
-        encoding=\"utf-8\") as file:\n        file.write(event +
-        \"\\n\")\n\n@app.post(\"/events\",
-        status_code=status.HTTP_202_ACCEPTED)\ndef
-        create_event(background_tasks:
-        BackgroundTasks):\n    background_tasks.add_task(write_audit,
-        \"event-created\")\n    return {\"accepted\": True}","options":["Коли
-        робота важка, критична, довга або потребує retry та окремих
-        workers","Коли треба просто повернути JSON","Для кожного if у
-        handler","Лише для GET"],"answer":0,"explanation":"Вбудовані background
-        tasks не є durable distributed queue; критична робота потребує окремої
-        моделі надійності."}
+        {"type":"prediction","lang":"python","question":"Коли варто використати зовнішню чергу замість BackgroundTasks?","options":["Коли робота важка, критична, довга або потребує retry та окремих workers","Коли треба просто повернути JSON","Для кожного if у handler","Лише для GET"],"answer":0,"code":"from fastapi import BackgroundTasks, FastAPI, status\n\napp = FastAPI()\n\ndef write_audit(event: str) -> None:\n    with open(\"audit.log\", \"a\", encoding=\"utf-8\") as file:\n        file.write(event + \"\\n\")\n\n@app.post(\"/events\", status_code=status.HTTP_202_ACCEPTED)\ndef create_event(background_tasks: BackgroundTasks):\n    background_tasks.add_task(write_audit, \"event-created\")\n    return {\"accepted\": True}","explanation":"Вбудовані background tasks не є durable distributed queue; критична робота потребує окремої моделі надійності."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Коли варто використати зовнішню чергу замість BackgroundTasks?","options":["Коли робота важка, критична, довга або потребує retry та окремих workers","Коли треба просто повернути JSON","Для кожного if у handler","Лише для GET"],"answer":0,"code":"from fastapi import BackgroundTasks, FastAPI, status\n\napp = FastAPI()\n\ndef write_audit(event: str) -> None:\n    with open(\"audit.log\", \"a\", encoding=\"utf-8\") as file:\n        file.write(event + \"\\n\")\n\n@app.post(\"/events\", status_code=status.HTTP_202_ACCEPTED)\ndef create_event(background_tasks: BackgroundTasks):\n    background_tasks.add_task(write_audit, \"event-created\")\n    return {\"accepted\": True}","explanation":"Вбудовані background tasks не є durable distributed queue; критична робота потребує окремої моделі надійності."}]}
 
         ```
 
@@ -2547,6 +2514,7 @@ topics:
         def create_event(background_tasks: BackgroundTasks):
             background_tasks.add_task(write_audit, "event-created")
             return {"accepted": True}
+
         ```
 
         **Навіщо саме це тут:** Фрагмент показує малу післявідповідну операцію і
@@ -2612,6 +2580,7 @@ topics:
                 raise HTTPException(status_code=415, detail="Unsupported media type")
             chunk = await file.read(1024)
             return {"filename": file.filename, "bytes_sampled": len(chunk)}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -2629,19 +2598,7 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Чому не можна довіряти
-        лише `file.content_type`?","code":"from fastapi import FastAPI, File,
-        HTTPException, UploadFile\n\napp =
-        FastAPI()\n\n@app.post(\"/images\")\nasync def upload_image(file:
-        UploadFile = File(...)):\n    allowed = {\"image/jpeg\",
-        \"image/png\"}\n    if file.content_type not in allowed:\n        raise
-        HTTPException(status_code=415, detail=\"Unsupported media
-        type\")\n    chunk = await file.read(1024)\n    return {\"filename\":
-        file.filename, \"bytes_sampled\": len(chunk)}","options":["Його значення
-        надсилає клієнт і його можна підробити","FastAPI не вміє читати
-        MIME","UploadFile завжди порожній","CORS змінює тип
-        файлу"],"answer":0,"explanation":"Content-Type є сигналом від клієнта.
-        Реальний формат, розмір і вміст треба перевіряти окремо."}
+        {"type":"prediction","lang":"python","question":"Чому не можна довіряти лише `file.content_type`?","code":"from fastapi import FastAPI, File, HTTPException, UploadFile\n\napp = FastAPI()\n\n@app.post(\"/images\")\nasync def upload_image(file: UploadFile = File(...)):\n    allowed = {\"image/jpeg\", \"image/png\"}\n    if file.content_type not in allowed:\n        raise HTTPException(status_code=415, detail=\"Unsupported media type\")\n    chunk = await file.read(1024)\n    return {\"filename\": file.filename, \"bytes_sampled\": len(chunk)}","options":["Його значення надсилає клієнт і його можна підробити","FastAPI не вміє читати MIME","UploadFile завжди порожній","CORS змінює тип файлу"],"answer":0,"explanation":"Content-Type є сигналом від клієнта. Реальний формат, розмір і вміст треба перевіряти окремо."}
 
         ```
 
@@ -2676,6 +2633,7 @@ topics:
                 raise HTTPException(status_code=415, detail="Unsupported media type")
             chunk = await file.read(1024)
             return {"filename": file.filename, "bytes_sampled": len(chunk)}
+
         ```
 
         **Навіщо саме це тут:** Обмежене читання демонструє ресурсну безпеку ще
@@ -2746,6 +2704,7 @@ topics:
                 status_code=409,
                 content={"code": "BOOK_EXISTS", "message": "Book already exists"},
             )
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -2762,20 +2721,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Чому доменний exception
-        не обов’язково має створювати HTTPException прямо в
-        service?","code":"from fastapi import FastAPI, Request\nfrom
-        fastapi.responses import JSONResponse\n\nclass
-        BookAlreadyExists(Exception):\n    pass\n\napp =
-        FastAPI()\n\n@app.exception_handler(BookAlreadyExists)\nasync def
-        book_conflict(request: Request, exc: BookAlreadyExists):\n    return
-        JSONResponse(\n        status_code=409,\n        content={\"code\":
-        \"BOOK_EXISTS\", \"message\": \"Book already
-        exists\"},\n    )","options":["Так service не залежить від HTTP, а route
-        boundary централізовано мапить помилку","Тому що HTTPException
-        заборонений у Python","Щоб помилки ігнорувалися","Щоб не було status
-        code"],"answer":0,"explanation":"Відокремлення домену від транспорту
-        полегшує повторне використання та тестування service."}
+        {"type":"prediction","lang":"python","question":"Чому доменний exception не обов’язково має створювати HTTPException прямо в service?","options":["Так service не залежить від HTTP, а route boundary централізовано мапить помилку","Тому що HTTPException заборонений у Python","Щоб помилки ігнорувалися","Щоб не було status code"],"answer":0,"code":"from fastapi import FastAPI, Request\nfrom fastapi.responses import JSONResponse\n\nclass BookAlreadyExists(Exception):\n    pass\n\napp = FastAPI()\n\n@app.exception_handler(BookAlreadyExists)\nasync def book_conflict(request: Request, exc: BookAlreadyExists):\n    return JSONResponse(\n        status_code=409,\n        content={\"code\": \"BOOK_EXISTS\", \"message\": \"Book already exists\"},\n    )","explanation":"Відокремлення домену від транспорту полегшує повторне використання та тестування service."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Чому доменний exception не обов’язково має створювати HTTPException прямо в service?","options":["Так service не залежить від HTTP, а route boundary централізовано мапить помилку","Тому що HTTPException заборонений у Python","Щоб помилки ігнорувалися","Щоб не було status code"],"answer":0,"code":"from fastapi import FastAPI, Request\nfrom fastapi.responses import JSONResponse\n\nclass BookAlreadyExists(Exception):\n    pass\n\napp = FastAPI()\n\n@app.exception_handler(BookAlreadyExists)\nasync def book_conflict(request: Request, exc: BookAlreadyExists):\n    return JSONResponse(\n        status_code=409,\n        content={\"code\": \"BOOK_EXISTS\", \"message\": \"Book already exists\"},\n    )","explanation":"Відокремлення домену від транспорту полегшує повторне використання та тестування service."}]}
 
         ```
 
@@ -2814,6 +2766,7 @@ topics:
                 status_code=409,
                 content={"code": "BOOK_EXISTS", "message": "Book already exists"},
             )
+
         ```
 
         **Навіщо саме це тут:** Приклад показує межу між доменною подією та
@@ -2886,6 +2839,7 @@ topics:
         def test_invalid_book_id():
             response = client.get("/books/not-a-number")
             assert response.status_code == 422
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -2901,20 +2855,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що додає TestClient
-        порівняно з прямим `read_book(7)`?","code":"from fastapi import
-        FastAPI\nfrom fastapi.testclient import TestClient\n\napp =
-        FastAPI()\n\n@app.get(\"/books/{book_id}\")\ndef read_book(book_id:
-        int):\n    return {\"id\": book_id}\n\nclient = TestClient(app)\n\ndef
-        test_read_book():\n    response = client.get(\"/books/7\")\n    assert
-        response.status_code == 200\n    assert response.json() == {\"id\":
-        7}\n\ndef test_invalid_book_id():\n    response =
-        client.get(\"/books/not-a-number\")\n    assert response.status_code ==
-        422","options":["Перевірку маршрутизації, HTTP-методу, валідації та
-        формування response","Виконання production БД","Автоматичне створення
-        користувача","Перевірку CSS"],"answer":0,"explanation":"TestClient
-        проходить ASGI boundary, тому тестує більше, ніж чистий виклик
-        функції."}
+        {"type":"prediction","lang":"python","question":"Що додає TestClient порівняно з прямим `read_book(7)`?","options":["Перевірку маршрутизації, HTTP-методу, валідації та формування response","Виконання production БД","Автоматичне створення користувача","Перевірку CSS"],"answer":0,"code":"from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n@app.get(\"/books/{book_id}\")\ndef read_book(book_id: int):\n    return {\"id\": book_id}\n\nclient = TestClient(app)\n\ndef test_read_book():\n    response = client.get(\"/books/7\")\n    assert response.status_code == 200\n    assert response.json() == {\"id\": 7}\n\ndef test_invalid_book_id():\n    response = client.get(\"/books/not-a-number\")\n    assert response.status_code == 422","explanation":"TestClient проходить ASGI boundary, тому тестує більше, ніж чистий виклик функції."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що додає TestClient порівняно з прямим `read_book(7)`?","options":["Перевірку маршрутизації, HTTP-методу, валідації та формування response","Виконання production БД","Автоматичне створення користувача","Перевірку CSS"],"answer":0,"code":"from fastapi import FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\n@app.get(\"/books/{book_id}\")\ndef read_book(book_id: int):\n    return {\"id\": book_id}\n\nclient = TestClient(app)\n\ndef test_read_book():\n    response = client.get(\"/books/7\")\n    assert response.status_code == 200\n    assert response.json() == {\"id\": 7}\n\ndef test_invalid_book_id():\n    response = client.get(\"/books/not-a-number\")\n    assert response.status_code == 422","explanation":"TestClient проходить ASGI boundary, тому тестує більше, ніж чистий виклик функції."}]}
 
         ```
 
@@ -2958,6 +2905,7 @@ topics:
         def test_invalid_book_id():
             response = client.get("/books/not-a-number")
             assert response.status_code == 422
+
         ```
 
         **Навіщо саме це тут:** Два тести показують, що позитивна й негативна
@@ -2999,7 +2947,9 @@ topics:
         FastAPI має словник `app.dependency_overrides`. Ключем є оригінальна dependency, значенням — тестова функція. Під час запиту FastAPI виконає override. Після тесту overrides потрібно очистити, інакше наступні тести отримають неправильний контекст. Async code тестують async HTTP client у відповідному event loop.
 
         ### Мінімальний приклад коду
+
         ```python
+
         from fastapi import Depends, FastAPI
         from fastapi.testclient import TestClient
 
@@ -3019,6 +2969,7 @@ topics:
                 assert response.json()["role"] == "tester"
             finally:
                 app.dependency_overrides.clear()
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -3028,7 +2979,15 @@ topics:
         Після clear наступний тест знову використає справжню dependency.
 
         ```interactive
-        {"type":"prediction","lang":"python","question":"Навіщо очищати app.dependency_overrides після тесту?","code":"from fastapi import Depends, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\ndef current_user():\n    return {\"id\": 99, \"role\": \"reader\"}\n\n@app.get(\"/me\")\ndef me(user = Depends(current_user)):\n    return user\n\ndef test_me_as_fixed_user():\n    app.dependency_overrides[current_user] = lambda: {\"id\": 1, \"role\": \"tester\"}\n    try:\n        response = TestClient(app).get(\"/me\")\n        assert response.json()[\"role\"] == \"tester\"\n    finally:\n        app.dependency_overrides.clear()","options":["Щоб підміна не протекла в інші тести","Щоб видалити endpoint","Щоб очистити БД production","Щоб увімкнути CORS"],"answer":0,"explanation":"Overrides є mutable state застосунку й повинні мати межу одного тесту."}
+
+        {"type":"prediction","lang":"python","question":"Навіщо очищати app.dependency_overrides після тесту?","options":["Щоб підміна не протекла в інші тести","Щоб видалити endpoint","Щоб очистити БД production","Щоб увімкнути CORS"],"answer":0,"code":"from fastapi import Depends, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\ndef current_user():\n    return {\"id\": 99, \"role\": \"reader\"}\n\n@app.get(\"/me\")\ndef me(user = Depends(current_user)):\n    return user\n\ndef test_me_as_fixed_user():\n    app.dependency_overrides[current_user] = lambda: {\"id\": 1, \"role\": \"tester\"}\n    try:\n        response = TestClient(app).get(\"/me\")\n        assert response.json()[\"role\"] == \"tester\"\n    finally:\n        app.dependency_overrides.clear()","explanation":"Overrides є mutable state застосунку й повинні мати межу одного тесту."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Навіщо очищати app.dependency_overrides після тесту?","options":["Щоб підміна не протекла в інші тести","Щоб видалити endpoint","Щоб очистити БД production","Щоб увімкнути CORS"],"answer":0,"code":"from fastapi import Depends, FastAPI\nfrom fastapi.testclient import TestClient\n\napp = FastAPI()\n\ndef current_user():\n    return {\"id\": 99, \"role\": \"reader\"}\n\n@app.get(\"/me\")\ndef me(user = Depends(current_user)):\n    return user\n\ndef test_me_as_fixed_user():\n    app.dependency_overrides[current_user] = lambda: {\"id\": 1, \"role\": \"tester\"}\n    try:\n        response = TestClient(app).get(\"/me\")\n        assert response.json()[\"role\"] == \"tester\"\n    finally:\n        app.dependency_overrides.clear()","explanation":"Overrides є mutable state застосунку й повинні мати межу одного тесту."}]}
+
         ```
 
         ### Як змінюється поведінка
@@ -3039,7 +2998,9 @@ topics:
 
         ### На практиці
         Цей фрагмент показує, де конструкція з теми стає частиною справжнього API:
+
         ```python
+
         from fastapi import Depends, FastAPI
         from fastapi.testclient import TestClient
 
@@ -3059,6 +3020,7 @@ topics:
                 assert response.json()["role"] == "tester"
             finally:
                 app.dependency_overrides.clear()
+
         ```
 
         **Навіщо саме це тут:** Фіксований user дозволяє перевірити route без криптографічного та мережевого шуму.
@@ -3119,6 +3081,7 @@ topics:
 
         def search_status(request: Request):
             return request.app.state.search_index
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -3136,18 +3099,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Для чого призначена
-        частина lifespan після yield?","code":"from contextlib import
-        asynccontextmanager\nfrom fastapi import FastAPI,
-        Request\n\n@asynccontextmanager\nasync def lifespan(app:
-        FastAPI):\n    app.state.search_index = {\"ready\":
-        True}\n    yield\n    app.state.search_index = None\n\napp =
-        FastAPI(lifespan=lifespan)\n\n@app.get(\"/search/status\")\ndef
-        search_status(request: Request):\n    return
-        request.app.state.search_index","options":["Для звільнення process-level
-        ресурсу під час shutdown","Для валідації кожного query","Для формування
-        OpenAPI","Для читання request body"],"answer":0,"explanation":"Exit-фаза
-        lifespan закриває ресурси, створені під час startup."}
+        {"type":"prediction","lang":"python","question":"Для чого призначена частина lifespan після yield?","options":["Для звільнення process-level ресурсу під час shutdown","Для валідації кожного query","Для формування OpenAPI","Для читання request body"],"answer":0,"code":"from contextlib import asynccontextmanager\nfrom fastapi import FastAPI, Request\n\n@asynccontextmanager\nasync def lifespan(app: FastAPI):\n    app.state.search_index = {\"ready\": True}\n    yield\n    app.state.search_index = None\n\napp = FastAPI(lifespan=lifespan)\n\n@app.get(\"/search/status\")\ndef search_status(request: Request):\n    return request.app.state.search_index","explanation":"Exit-фаза lifespan закриває ресурси, створені під час startup."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Для чого призначена частина lifespan після yield?","options":["Для звільнення process-level ресурсу під час shutdown","Для валідації кожного query","Для формування OpenAPI","Для читання request body"],"answer":0,"code":"from contextlib import asynccontextmanager\nfrom fastapi import FastAPI, Request\n\n@asynccontextmanager\nasync def lifespan(app: FastAPI):\n    app.state.search_index = {\"ready\": True}\n    yield\n    app.state.search_index = None\n\napp = FastAPI(lifespan=lifespan)\n\n@app.get(\"/search/status\")\ndef search_status(request: Request):\n    return request.app.state.search_index","explanation":"Exit-фаза lifespan закриває ресурси, створені під час startup."}]}
 
         ```
 
@@ -3188,6 +3146,7 @@ topics:
 
         def search_status(request: Request):
             return request.app.state.search_index
+
         ```
 
         **Навіщо саме це тут:** Search index є зрозумілим прикладом дорогого
@@ -3255,6 +3214,7 @@ topics:
                     await websocket.send_text(f"echo: {message}")
             except WebSocketDisconnect:
                 pass
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -3271,19 +3231,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Чим WebSocket
-        принципово відрізняється від звичайного GET endpoint?","code":"from
-        fastapi import FastAPI, WebSocket, WebSocketDisconnect\n\napp =
-        FastAPI()\n\n@app.websocket(\"/ws\")\nasync def
-        websocket_endpoint(websocket: WebSocket):\n    await
-        websocket.accept()\n    try:\n        while True:\n            message =
-        await websocket.receive_text()\n            await
-        websocket.send_text(f\"echo: {message}\")\n    except
-        WebSocketDisconnect:\n        pass","options":["Він підтримує
-        довгоживучий двосторонній канал після handshake","Він завжди повертає
-        HTML","Він не має авторизації","Він читає лише
-        stdin"],"answer":0,"explanation":"WebSocket дозволяє серверу й клієнту
-        надсилати повідомлення в межах відкритого з’єднання."}
+        {"type":"prediction","lang":"python","question":"Чим WebSocket принципово відрізняється від звичайного GET endpoint?","options":["Він підтримує довгоживучий двосторонній канал після handshake","Він завжди повертає HTML","Він не має авторизації","Він читає лише stdin"],"answer":0,"code":"from fastapi import FastAPI, WebSocket, WebSocketDisconnect\n\napp = FastAPI()\n\n@app.websocket(\"/ws\")\nasync def websocket_endpoint(websocket: WebSocket):\n    await websocket.accept()\n    try:\n        while True:\n            message = await websocket.receive_text()\n            await websocket.send_text(f\"echo: {message}\")\n    except WebSocketDisconnect:\n        pass","explanation":"WebSocket дозволяє серверу й клієнту надсилати повідомлення в межах відкритого з’єднання."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Чим WebSocket принципово відрізняється від звичайного GET endpoint?","options":["Він підтримує довгоживучий двосторонній канал після handshake","Він завжди повертає HTML","Він не має авторизації","Він читає лише stdin"],"answer":0,"code":"from fastapi import FastAPI, WebSocket, WebSocketDisconnect\n\napp = FastAPI()\n\n@app.websocket(\"/ws\")\nasync def websocket_endpoint(websocket: WebSocket):\n    await websocket.accept()\n    try:\n        while True:\n            message = await websocket.receive_text()\n            await websocket.send_text(f\"echo: {message}\")\n    except WebSocketDisconnect:\n        pass","explanation":"WebSocket дозволяє серверу й клієнту надсилати повідомлення в межах відкритого з’єднання."}]}
 
         ```
 
@@ -3321,6 +3275,7 @@ topics:
                     await websocket.send_text(f"echo: {message}")
             except WebSocketDisconnect:
                 pass
+
         ```
 
         **Навіщо саме це тут:** Echo endpoint ізолює transport-механику від
@@ -3393,6 +3348,7 @@ topics:
 
         async def events():
             return StreamingResponse(numbers(), media_type="text/event-stream")
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -3409,19 +3365,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Коли StreamingResponse
-        корисніший за звичайний JSON?","code":"import asyncio\nfrom
-        collections.abc import AsyncIterator\nfrom fastapi import FastAPI\nfrom
-        fastapi.responses import StreamingResponse\n\napp = FastAPI()\n\nasync
-        def numbers() -> AsyncIterator[str]:\n    for number in
-        range(3):\n        yield f\"data: {number}\\n\\n\"\n        await
-        asyncio.sleep(0.01)\n\n@app.get(\"/events\")\nasync def
-        events():\n    return StreamingResponse(numbers(),
-        media_type=\"text/event-stream\")","options":["Коли результат великий
-        або виробляється поступово","Коли потрібно виконати SQL без
-        транзакції","Коли треба приховати status code","Коли клієнт не має
-        HTTP"],"answer":0,"explanation":"Streaming зменшує час до першого байта
-        й не вимагає зберігати весь результат у пам’яті."}
+        {"type":"prediction","lang":"python","question":"Коли StreamingResponse корисніший за звичайний JSON?","options":["Коли результат великий або виробляється поступово","Коли потрібно виконати SQL без транзакції","Коли треба приховати status code","Коли клієнт не має HTTP"],"answer":0,"code":"import asyncio\nfrom collections.abc import AsyncIterator\nfrom fastapi import FastAPI\nfrom fastapi.responses import StreamingResponse\n\napp = FastAPI()\n\nasync def numbers() -> AsyncIterator[str]:\n    for number in range(3):\n        yield f\"data: {number}\\n\\n\"\n        await asyncio.sleep(0.01)\n\n@app.get(\"/events\")\nasync def events():\n    return StreamingResponse(numbers(), media_type=\"text/event-stream\")","explanation":"Streaming зменшує час до першого байта й не вимагає зберігати весь результат у пам’яті."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Коли StreamingResponse корисніший за звичайний JSON?","options":["Коли результат великий або виробляється поступово","Коли потрібно виконати SQL без транзакції","Коли треба приховати status code","Коли клієнт не має HTTP"],"answer":0,"code":"import asyncio\nfrom collections.abc import AsyncIterator\nfrom fastapi import FastAPI\nfrom fastapi.responses import StreamingResponse\n\napp = FastAPI()\n\nasync def numbers() -> AsyncIterator[str]:\n    for number in range(3):\n        yield f\"data: {number}\\n\\n\"\n        await asyncio.sleep(0.01)\n\n@app.get(\"/events\")\nasync def events():\n    return StreamingResponse(numbers(), media_type=\"text/event-stream\")","explanation":"Streaming зменшує час до першого байта й не вимагає зберігати весь результат у пам’яті."}]}
 
         ```
 
@@ -3463,6 +3413,7 @@ topics:
 
         async def events():
             return StreamingResponse(numbers(), media_type="text/event-stream")
+
         ```
 
         **Навіщо саме це тут:** SSE-приклад показує практичний формат
@@ -3526,6 +3477,7 @@ topics:
         def search(q: str = Query(min_length=1, max_length=100)):
             # q передається в параметризований repository-запит, не в f-string SQL.
             return {"query": q.strip()}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -3542,17 +3494,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що робить CORS і чого
-        він не робить?","code":"from fastapi import FastAPI, Query\n\napp =
-        FastAPI()\n\n@app.get(\"/search\")\ndef search(q: str =
-        Query(min_length=1, max_length=100)):\n    # q передається в
-        параметризований repository-запит, не в f-string SQL.\n    return
-        {\"query\": q.strip()}","options":["Керує browser origins, але не
-        замінює authentication, authorization або захист від injection","Шифрує
-        всі SQL-запити","Перевіряє пароль користувача","Забороняє curl на
-        сервері"],"answer":0,"explanation":"CORS — browser policy. Безпека
-        endpoint потребує окремих validation, auth, authorization, TLS і rate
-        limits."}
+        {"type":"prediction","lang":"python","question":"Що робить CORS і чого він не робить?","options":["Керує browser origins, але не замінює authentication, authorization або захист від injection","Шифрує всі SQL-запити","Перевіряє пароль користувача","Забороняє curl на сервері"],"answer":0,"code":"from fastapi import FastAPI, Query\n\napp = FastAPI()\n\n@app.get(\"/search\")\ndef search(q: str = Query(min_length=1, max_length=100)):\n    # q передається в параметризований repository-запит, не в f-string SQL.\n    return {\"query\": q.strip()}","explanation":"CORS — browser policy. Безпека endpoint потребує окремих validation, auth, authorization, TLS і rate limits."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що робить CORS і чого він не робить?","options":["Керує browser origins, але не замінює authentication, authorization або захист від injection","Шифрує всі SQL-запити","Перевіряє пароль користувача","Забороняє curl на сервері"],"answer":0,"code":"from fastapi import FastAPI, Query\n\napp = FastAPI()\n\n@app.get(\"/search\")\ndef search(q: str = Query(min_length=1, max_length=100)):\n    # q передається в параметризований repository-запит, не в f-string SQL.\n    return {\"query\": q.strip()}","explanation":"CORS — browser policy. Безпека endpoint потребує окремих validation, auth, authorization, TLS і rate limits."}]}
 
         ```
 
@@ -3584,6 +3532,7 @@ topics:
         def search(q: str = Query(min_length=1, max_length=100)):
             # q передається в параметризований repository-запит, не в f-string SQL.
             return {"query": q.strip()}
+
         ```
 
         **Навіщо саме це тут:** Search endpoint є маленькою межею, на якій видно
@@ -3625,7 +3574,9 @@ topics:
         Middleware бачить request і response, тому може виміряти latency та додати request id. Logger відправляє структуровану подію. Metrics агрегують count/error/latency buckets. Помилка route повинна мати correlation id, щоб за ним знайти traceback, але клієнту не віддається внутрішній стек.
 
         ### Мінімальний приклад коду
+
         ```python
+
         import logging
         import time
         from fastapi import FastAPI, Request
@@ -3643,6 +3594,7 @@ topics:
                        "latency_ms": round((time.perf_counter() - started) * 1000, 2)},
             )
             return response
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -3652,7 +3604,15 @@ topics:
         Повільний endpoint матиме більше latency_ms, але log не повинен містити bearer token.
 
         ```interactive
-        {"type":"prediction","lang":"python","question":"Яка інформація є корисною для діагностики request без зайвого ризику?","code":"import logging\nimport time\nfrom fastapi import FastAPI, Request\n\nlogger = logging.getLogger(\"api\")\napp = FastAPI()\n\n@app.middleware(\"http\")\nasync def observe(request: Request, call_next):\n    started = time.perf_counter()\n    response = await call_next(request)\n    logger.info(\n        \"request_finished\",\n        extra={\"method\": request.method, \"path\": request.url.path, \"status\": response.status_code,\n               \"latency_ms\": round((time.perf_counter() - started) * 1000, 2)},\n    )\n    return response","options":["request id, method, normalized path, status і latency","Повний Authorization header і пароль","Весь body без redaction","Лише слово error"],"answer":0,"explanation":"Ці поля дають кореляцію та latency без запису секретів; персональні поля мають окрему policy."}
+
+        {"type":"prediction","lang":"python","question":"Які значення виведе цей безпечний журнал запиту?","code":"headers = {\"authorization\": \"Bearer secret\", \"x-request-id\": \"req-17\"}\nsafe_log = {\"request_id\": headers.get(\"x-request-id\"), \"authorization\": \"[redacted]\"}\nprint(safe_log[\"request_id\"], safe_log[\"authorization\"])","options":["req-17 [redacted]","Bearer secret req-17","None [redacted]"],"answer":0,"explanation":"ID запиту допомагає простежити подію, а значення Authorization залишається прихованим."}
+
+        ```
+
+        ```interactive
+
+        {"type":"spot-the-bug","lang":"python","question":"Який рядок розкриває облікові дані в журналах застосунку?","lines":["@app.middleware(\"http\")","async def log_request(request: Request, call_next):","    token = request.headers.get(\"authorization\")","    logger.info(\"request token=%s\", token)","    return await call_next(request)"],"buggyLine":4,"explanation":"Значення Authorization є секретом. Замість нього журналюй ID запиту, метод, шлях, статус і тривалість."}
+
         ```
 
         ### Як змінюється поведінка
@@ -3663,7 +3623,9 @@ topics:
 
         ### На практиці
         Цей фрагмент показує, де конструкція з теми стає частиною справжнього API:
+
         ```python
+
         import logging
         import time
         from fastapi import FastAPI, Request
@@ -3681,6 +3643,7 @@ topics:
                        "latency_ms": round((time.perf_counter() - started) * 1000, 2)},
             )
             return response
+
         ```
 
         **Навіщо саме це тут:** Middleware дає одну точку для технічної telemetry, не розмножуючи код у кожному handler.
@@ -3759,19 +3722,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Яка послідовність
-        найкраще підходить для мініпроєкту?","code":"# app/main.py\nfrom fastapi
-        import FastAPI\nfrom app.routers import books\n\napp =
-        FastAPI(title=\"Reading Log API\",
-        version=\"1.0.0\")\napp.include_router(books.router,
-        prefix=\"/api/v1\")\n\n# app/routers/books.py\n# route -> service ->
-        repository -> response model\n\n# tests/test_books.py\n# TestClient +
-        dependency override + negative cases","options":["Спочатку один
-        вертикальний сценарій, потім validation, persistence, auth, tests і
-        deployment","Спочатку 50 endpoint без тестів","Спочатку красивий
-        frontend без API contract","Спочатку production secrets у
-        git"],"answer":0,"explanation":"Вертикальний зріз швидко дає працюючий
-        доказ, а наступні milestone додають складність контрольовано."}
+        {"type":"prediction","lang":"python","question":"Яка послідовність найкраще підходить для мініпроєкту?","options":["Спочатку один вертикальний сценарій, потім validation, persistence, auth, tests і deployment","Спочатку 50 endpoint без тестів","Спочатку красивий frontend без API contract","Спочатку production secrets у git"],"answer":0,"code":"# app/main.py\nfrom fastapi import FastAPI\nfrom app.routers import books\n\napp = FastAPI(title=\"Reading Log API\", version=\"1.0.0\")\napp.include_router(books.router, prefix=\"/api/v1\")\n\n# app/routers/books.py\n# route -> service -> repository -> response model\n\n# tests/test_books.py\n# TestClient + dependency override + negative cases","explanation":"Вертикальний зріз швидко дає працюючий доказ, а наступні milestone додають складність контрольовано."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Яка послідовність найкраще підходить для мініпроєкту?","options":["Спочатку один вертикальний сценарій, потім validation, persistence, auth, tests і deployment","Спочатку 50 endpoint без тестів","Спочатку красивий frontend без API contract","Спочатку production secrets у git"],"answer":0,"code":"# app/main.py\nfrom fastapi import FastAPI\nfrom app.routers import books\n\napp = FastAPI(title=\"Reading Log API\", version=\"1.0.0\")\napp.include_router(books.router, prefix=\"/api/v1\")\n\n# app/routers/books.py\n# route -> service -> repository -> response model\n\n# tests/test_books.py\n# TestClient + dependency override + negative cases","explanation":"Вертикальний зріз швидко дає працюючий доказ, а наступні milestone додають складність контрольовано."}]}
 
         ```
 
@@ -3883,6 +3840,7 @@ topics:
         def ready():
             # Тут перевіряють критичні залежності з timeout.
             return {"status": "ready"}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -3900,19 +3858,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Яка різниця між
-        liveness і readiness?","code":"# Приклад команди запуску, не виконувати
-        у навчальному endpoint\n# uvicorn app.main:app --host 0.0.0.0 --port
-        8000 --workers 2\n\nfrom fastapi import FastAPI\n\napp =
-        FastAPI(debug=False)\n\n@app.get(\"/health/live\")\ndef
-        live():\n    return {\"status\":
-        \"ok\"}\n\n@app.get(\"/health/ready\")\ndef ready():\n    # Тут
-        перевіряють критичні залежності з timeout.\n    return {\"status\":
-        \"ready\"}","options":["Liveness показує, що процес живий; readiness —
-        що він може приймати корисну роботу","Liveness перевіряє пароль,
-        readiness — CSS","Це два назви одного SQL-запиту","Readiness запускає
-        workers"],"answer":0,"explanation":"Розділення сигналів допомагає
-        оркестратору не надсилати трафік нездоровому, але живому процесу."}
+        {"type":"prediction","lang":"python","question":"Яка різниця між liveness і readiness?","options":["Liveness показує, що процес живий; readiness — що він може приймати корисну роботу","Liveness перевіряє пароль, readiness — CSS","Це два назви одного SQL-запиту","Readiness запускає workers"],"answer":0,"code":"# Приклад команди запуску, не виконувати у навчальному endpoint\n# uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2\n\nfrom fastapi import FastAPI\n\napp = FastAPI(debug=False)\n\n@app.get(\"/health/live\")\ndef live():\n    return {\"status\": \"ok\"}\n\n@app.get(\"/health/ready\")\ndef ready():\n    # Тут перевіряють критичні залежності з timeout.\n    return {\"status\": \"ready\"}","explanation":"Розділення сигналів допомагає оркестратору не надсилати трафік нездоровому, але живому процесу."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Яка різниця між liveness і readiness?","options":["Liveness показує, що процес живий; readiness — що він може приймати корисну роботу","Liveness перевіряє пароль, readiness — CSS","Це два назви одного SQL-запиту","Readiness запускає workers"],"answer":0,"code":"# Приклад команди запуску, не виконувати у навчальному endpoint\n# uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2\n\nfrom fastapi import FastAPI\n\napp = FastAPI(debug=False)\n\n@app.get(\"/health/live\")\ndef live():\n    return {\"status\": \"ok\"}\n\n@app.get(\"/health/ready\")\ndef ready():\n    # Тут перевіряють критичні залежності з timeout.\n    return {\"status\": \"ready\"}","explanation":"Розділення сигналів допомагає оркестратору не надсилати трафік нездоровому, але живому процесу."}]}
 
         ```
 
@@ -3953,6 +3905,7 @@ topics:
         def ready():
             # Тут перевіряють критичні залежності з timeout.
             return {"status": "ready"}
+
         ```
 
         **Навіщо саме це тут:** Health endpoints і production checklist

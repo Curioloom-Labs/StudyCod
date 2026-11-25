@@ -3,14 +3,13 @@ course: python-extensions
 topics:
   - title: "HTTP clients: requests/httpx"
     key: http-kliyenty-requests-httpx
-    description: describe the boundary between the application and an external
-      service or resource. check data format, errors and missing values.
+    description: "After this topic, learners can send HTTP requests with a timeout and validate status and response shape."
     order: 31
-    exerciseFocus: "one operation with a format or resource; clearly record the
-      false and empty case"
+    exerciseFocus: "Write a short program demonstrating “send HTTP requests with a timeout and validate status and response shape”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "HTTP clients: requests/httpx"
       content: >-
+
         ### Intuitive explanation
 
         Almost every modern program communicates with the Internet: it pulls
@@ -56,11 +55,13 @@ topics:
                          params={"q": "weather", "units": "metric"})
         print(r.status_code)   # 200
 
-        data = r.json()        # requests сам розбирає JSON у словник
+        data = r.json()        # requests parses JSON into a dictionary
 
         print(data["city"])
 
-        ```You see: `requests` hides the manual encoding, byte reading, and JSON
+        ```
+
+        You see: `requests` hides the manual encoding, byte reading, and JSON
         parsing — but **under the hood** exactly the same thing is happening as
         you'll see in the working example.
 
@@ -94,25 +95,27 @@ topics:
 
         params = urlencode({"q": "weather", "units": "metric"})
 
-        print("рядок запиту:", params)
+        print("query string:", params)
 
         with urlopen("http://127.0.0.1:8731/api?" + params) as resp:
-            print("статус:", resp.status)
+            print("status:", resp.status)
             data = json.loads(resp.read().decode("utf-8"))
 
-        print("місто:", data["city"], "темп:", data["temp"])
+        print("city:", data["city"], "temp:", data["temp"])
 
         server.server_close()
 
-        ```Output:
+        ```
+
+        Output:
 
         ```
 
-        рядок запиту: q=weather&units=metric
+        query string: q=weather&units=metric
 
-        статус: 200
+        status: 200
 
-        місто: Kyiv темп: 21
+        city: Kyiv temp: 21
 
         ```
 
@@ -143,19 +146,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"The server returned a
-        response in which resp.read() returned b'{\"ok\": true}'. What happens
-        after data = json.loads(resp.read()); if the body has already been read
-        before by the same resp.read()?","options":["data will become {'ok':
-        True}","data will be empty/error - stream already exhausted","data will
-        be the string '{\"ok\": true}'","will return b'{\"ok\":
-        true}'"],"answer":1,"explanation":"The response body is a ONE TIME
-        stream. The first resp.read() reads all the bytes and the stream is
-        exhausted. The second resp.read() will return the already empty bytes
-        b'' and json.loads(b'') will throw a parsing error. Rule: read the body
-        EXACTLY ONCE and store the result in a variable. This is similar to the
-        one-time use of generators."}
+        {"type":"prediction","lang":"python","question":"The server returned a response in which resp.read() returned b'{\"ok\": true}'. What happens after data = json.loads(resp.read()); if the body has already been read before by the same resp.read()?","options":["data will become {'ok': True}","data will be empty/error - stream already exhausted","data will be the string '{\"ok\": true}'","will return b'{\"ok\": true}'"],"answer":1,"explanation":"The response body is a ONE TIME stream. The first resp.read() reads all the bytes and the stream is exhausted. The second resp.read() will return the already empty bytes b'' and json.loads(b'') will throw a parsing error. Rule: read the body EXACTLY ONCE and store the result in a variable. This is similar to the one-time use of generators."}
 
         ```
 
@@ -194,7 +185,9 @@ topics:
 
         print(params)
 
-        ```**Why it's here:** `urlencode` correctly encodes spaces and special
+        ```
+
+        **Why it's here:** `urlencode` correctly encodes spaces and special
         characters before passing parameters to the server.
 
 
@@ -222,14 +215,14 @@ topics:
         - python
   - title: "Parsing HTML: BeautifulSoup"
     key: parsynh-html-beautifulsoup
-    description: decompose the algorithm into successive checks or steps. explain
-      why this particular branch or iteration is being executed.
+    description: >-
+      After this topic, learners can find links and text in an HTML tree with BeautifulSoup CSS selectors and handle empty matches.
     order: 32
-    exerciseFocus: "one selection/repeat logic; be sure to add the empty, minimal,
-      and limiting case"
+    exerciseFocus: "Find links with a CSS selector, extract href and visible text, and handle a page with no matches."
     theory:
       title: "Parsing HTML: BeautifulSoup"
       content: >-
+
         ### Intuitive explanation
 
         Data on the Internet does not always come in convenient JSON. Often what
@@ -276,7 +269,10 @@ topics:
 
         for a in soup.find_all("a"):
             print(a["href"], "->", a.text)
-        ```See the difference in effort: BeautifulSoup builds a tree from HTML
+
+        ```
+
+        See the difference in effort: BeautifulSoup builds a tree from HTML
         and lets you search tags by name, class, attribute in one line. But
         conceptually, it does the same thing — it dissects the structure, not
         cutting the text.
@@ -290,9 +286,9 @@ topics:
         html = """
 
         <html><body>
-          <h1>Новини</h1>
-          <a href="/news/1">Перша</a>
-          <a href="/news/2">Друга</a>
+          <h1>News</h1>
+          <a href="/news/1">First</a>
+          <a href="/news/2">Second</a>
           <p class="date">2026-07-09</p>
         </body></html>
 
@@ -324,17 +320,19 @@ topics:
 
         for href, text in p.links:
             print(href, "->", text)
-        print("усього посилань:", len(p.links))
-
-        ```Output:
+        print("total links:", len(p.links))
 
         ```
 
-        /news/1 -> Перша
+        Output:
 
-        /news/2 -> Друга
+        ```
 
-        усього посилань: 2
+        /news/1 -> First
+
+        /news/2 -> Second
+
+        total links: 2
 
         ```
 
@@ -365,20 +363,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"spot-the-bug","lang":"python","question":"The parser must
-        collect ALL the text of the page, but the text_parts list is always
-        empty. Where is the error?","lines":["class
-        TextParser(HTMLParser):","    def
-        __init__(self):","        self.text_parts = []","    def
-        handle_data(self,
-        data):","        self.text_parts.append(data.strip())","","p =
-        TextParser()","p.feed('<p>привіт</p>')"],"buggyLine":3,"explanation":"Forgot
-        to call super().__init__() in __init__. HTMLParser in its constructor
-        configures the internal state required for parsing. Without
-        super().__init__(), the feed() method will either fail or not call
-        handle_data, so text_parts will be empty. Rule: When overriding __init__
-        in a descendant, always call super().__init__() first."}
+        {"type":"spot-the-bug","lang":"python","question":"The parser must collect ALL the text of the page, but the text_parts list is always empty. Where is the error?","lines":["class TextParser(HTMLParser):","    def __init__(self):","        self.text_parts = []","    def handle_data(self, data):","        self.text_parts.append(data.strip())","","p = TextParser()","p.feed('<p>hello</p>')"],"buggyLine":3,"explanation":"Forgot to call super().__init__() in __init__. HTMLParser in its constructor configures the internal state required for parsing. Without super().__init__(), the feed() method will either fail or not call handle_data, so text_parts will be empty. Rule: When overriding __init__ in a descendant, always call super().__init__() first."}
 
         ```
 
@@ -406,18 +391,35 @@ topics:
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        This fragment uses BeautifulSoup with local HTML:
 
         ```python
 
-        if score >= 60:
-            result = "зараховано"
-        else:
-            result = "ще раз"
-        ```**Why it's here:** The condition selects one branch and the result
-        gets the value in both scenarios.
+        from bs4 import BeautifulSoup
 
-        **Note:** Check the limit value.
+        html = """<ul><li><a href="/news/1">First</a></li></ul>"""
+
+        soup = BeautifulSoup(html, "html.parser")
+
+        links = [
+
+            (link.get_text(strip=True), link.get("href"))
+
+            for link in soup.select("a[href]")
+
+        ]
+
+        print(links)
+
+        ```
+
+        **Why this matters:** `select("a[href]")` finds links with an `href`, and `get_text(strip=True)` returns visible text.
+
+        **Note:** Check a page with no links and an anchor without an `href`.
+
+        **Coding task.** Extract every link as a `(text, href)` pair; check an empty result and a missing attribute.
+
+        **Check your work.** Predict the result before running the code. Compare a typical case and a relevant boundary case with your prediction, then explain the result.
 
         ### Summary
 
@@ -437,14 +439,13 @@ topics:
         - python
   - title: JSON; CSV; XML
     key: json-csv-xml
-    description: describe the boundary between the application and an external
-      service or resource. check data format, errors and missing values.
+    description: "After this topic, learners can read and serialize JSON, CSV, and XML while validating structure."
     order: 33
-    exerciseFocus: "one operation with a format or resource; clearly record the
-      false and empty case"
+    exerciseFocus: "Write a short program demonstrating “read and serialize JSON, CSV, and XML while validating structure”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: JSON; CSV; XML
       content: >-
+
         ### Intuitive explanation
 
         Data inside the program live as Python objects — dictionaries, lists.
@@ -497,7 +498,7 @@ topics:
 
         import xml.etree.ElementTree as ET
 
-        user = {"name": "Оля", "langs": ["Python", "SQL"], "active": True}
+        user = {"name": "Olha", "langs": ["Python", "SQL"], "active": True}
 
         text = json.dumps(user, ensure_ascii=False)
 
@@ -513,29 +514,31 @@ topics:
 
         writer.writeheader()
 
-        writer.writerow({"name": "Оля", "age": 20})
+        writer.writerow({"name": "Olha", "age": 20})
 
-        writer.writerow({"name": "Іван", "age": 25})
+        writer.writerow({"name": "Ivan", "age": 25})
 
         print(repr(buf.getvalue()))
 
-        xml = "<users><user name='Оля'/><user name='Іван'/></users>"
+        xml = "<users><user name='Olha'/><user name='Ivan'/></users>"
 
         root = ET.fromstring(xml)
 
         print([u.get("name") for u in root])
 
-        ```Output:
+        ```
+
+        Output:
 
         ```
 
-        {"name": "Оля", "langs": ["Python", "SQL"], "active": true}
+        {"name": "Olha", "langs": ["Python", "SQL"], "active": true}
 
         Python True
 
-        'name,age\r\nОля,20\r\nІван,25\r\n'
+        'name,age\r\nOlha,20\r\nIvan,25\r\n'
 
-        ['Оля', 'Іван']
+        ['Olha', 'Ivan']
 
         ```
 
@@ -566,16 +569,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"What will this code
-        print?\n\nimport json\ndata = json.loads('{\"ok\": true, \"count\":
-        null}')\nprint(data[\"ok\"], data[\"count\"])","options":["true
-        null","True None","1 0","a
-        mistake"],"answer":1,"explanation":"json.loads converts JSON to Python
-        objects by automatically converting types: JSON true becomes Python True
-        (uppercase), and JSON null becomes None. Therefore it prints 'True None'
-        and not 'true null'. This is the point of serialization — the module
-        itself negotiates the difference between JSON and Python types."}
+        {"type":"prediction","lang":"python","question":"What will this code print?\n\nimport json\ndata = json.loads('{\"ok\": true, \"count\": null}')\nprint(data[\"ok\"], data[\"count\"])","options":["true null","True None","1 0","a mistake"],"answer":1,"explanation":"json.loads converts JSON to Python objects by automatically converting types: JSON true becomes Python True (uppercase), and JSON null becomes None. Therefore it prints 'True None' and not 'true null'. This is the point of serialization — the module itself negotiates the difference between JSON and Python types."}
 
         ```
 
@@ -586,8 +580,8 @@ topics:
         without `s` - with **file**. Transfer the file to `dumps` - you will get
         an error.
 
-        2. **Forget `ensure_ascii=False`.** Ukrainian letters will be converted
-        to `С...`. Technically valid, but unreadable - add a flag.
+        2. **Forget `ensure_ascii=False`.** Non-ASCII letters will be written as
+        Unicode escapes such as `\u043f`. This is valid, but less readable - add the flag.
 
         3. **CSV without `newline=""`.** On Windows, you will get empty lines
         between entries. Open the file: `open(path, "w", newline="",
@@ -618,7 +612,9 @@ topics:
 
         print(data["ok"])
 
-        ```**Why it's here:** `dumps` serializes a structure, and `loads`
+        ```
+
+        **Why it's here:** `dumps` serializes a structure, and `loads`
         returns it back to a Python value.
 
 
@@ -644,16 +640,15 @@ topics:
       tags:
         - systems
         - python
-  - title: "Asynchrony: asyncio (async/await)"
+  - title: "Asynchronous programming: asyncio (async/await)"
     key: asynkhronnist-asyncio-async-await
-    description: to distinguish sequence, competition and parallelism. explain where
-      an application transfers control or waits for a resource.
+    description: "After this topic, learners can await coroutines without blocking the event loop."
     order: 34
-    exerciseFocus: "show one order/sync property; do not rely on the random order of
-      threads in expected output"
+    exerciseFocus: "Write a short program demonstrating “await coroutines without blocking the event loop”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "Asynchrony: asyncio (async/await)"
       content: >-
+
         ### Intuitive explanation
 
         Imagine that your program downloads 100 pages from the Internet. Each
@@ -701,89 +696,120 @@ topics:
 
         ```python
 
+
         import asyncio, time
 
+
         async def fetch(name, delay):
-            print(f"старт {name}")
+
+            print(f"start {name}")
+
             await asyncio.sleep(delay)
-            print(f"готово {name}")
-            return f"{name}: {delay}с"
+
+            print(f"done {name}")
+
+            return f"{name}: {delay}s"
+
 
         async def main():
+
             start = time.perf_counter()
+
             results = await asyncio.gather(
+
                 fetch("A", 0.3),
+
                 fetch("B", 0.1),
+
                 fetch("C", 0.2),
+
             )
+
             elapsed = time.perf_counter() - start
-            print("результати:", results)
-            print(f"загалом ~{elapsed:.1f}с (не 0.6с!)")
+
+            print("results:", results)
+
+            print(f"total ~{elapsed:.1f}s (not 0.6s!)")
+
 
         asyncio.run(main())
 
-        ```Output:
 
         ```
 
-        старт A
+        **Output:**
 
-        старт B
-
-        старт C
-
-        готово B
-
-        готово C
-
-        готово A
-
-        результати: ['A: 0.3с', 'B: 0.1с', 'C: 0.2с']
-
-        загалом ~0.3с (не 0.6с!)
 
         ```
+
+
+        start A
+
+        start B
+
+        start C
+
+        done B
+
+        done C
+
+        done A
+
+        results: ['A: 0.3s', 'B: 0.1s', 'C: 0.2s']
+
+        total ~0.3s (not 0.6s!)
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `async def fetch(...)` — declare the coroutine; her challenge prepares
+
         the work, but does not itself perform the body.
 
+
         - `await asyncio.sleep(delay)' — simulation of waiting for I/O; here the
+
         coroutine **gives** control.
 
+
         - all three "starts" are printed in a row — because `gather' launched
+
         routines almost simultaneously.
 
+
         - "ready" goes in the order of **completion**: B (0.1s) first, then C,
+
         then A.
 
+
         - `asyncio.gather(...)` — runs coroutines together and waits for all to
+
         finish.
 
+
         - `results` preserves the order of the **arguments** (A, B, C), not the
+
         order of completion.
 
+
         - `~0.3s' — the total time is equal to the longest task, not the sum:
+
         expectations have overlapped.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"The three coroutines
-        with await asyncio.sleep(2) are each run together via asyncio.gather.
-        How long will it take to complete?","options":["6 seconds","2
-        seconds","0 seconds","3 seconds"],"answer":1,"explanation":"gather runs
-        all three coroutines simultaneously. While one \"sleeps\" for 2 seconds,
-        the cycle of events switches to the others, so all three waits run
-        PARALLEL and overlap. The total time is equal to the longest wait - 2
-        seconds, not the sum of 6. If they were run one at a time (await one at
-        a time), it would be 6 seconds."}
+        {"type":"prediction","lang":"python","question":"The three coroutines with await asyncio.sleep(2) are each run together via asyncio.gather. How long will it take to complete?","options":["6 seconds","2 seconds","0 seconds","3 seconds"],"answer":1,"explanation":"gather runs all three coroutines simultaneously. While one \"sleeps\" for 2 seconds, the cycle of events switches to the others, so all three waits run PARALLEL and overlap. The total time is equal to the longest wait - 2 seconds, not the sum of 6. If they were run one at a time (await one at a time), it would be 6 seconds."}
 
         ```
+
 
 
         ### Typical mistakes of a beginner
@@ -809,17 +835,9 @@ topics:
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: await coroutines without blocking the event loop.
 
-        ```python
-
-        async def load():
-            await fetch_data()
-            return "готово"
-        ```**Why it's here:** `await` relinquishes control while waiting,
-        allowing other asynchronous tasks to run.
-
-        **Note:** An asynchronous function must be executed or expected.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -838,14 +856,13 @@ topics:
         - python
   - title: "Threads and processes: threading; multiprocessing"
     key: potoky-ta-protsesy-threading-multiprocessing
-    description: to distinguish sequence, competition and parallelism. explain where
-      an application transfers control or waits for a resource.
+    description: "After this topic, learners can choose threads for I/O and processes for CPU-bound work."
     order: 35
-    exerciseFocus: "show one order/sync property; do not rely on the random order of
-      threads in expected output"
+    exerciseFocus: "Write a short program demonstrating “choose threads for I/O and processes for CPU-bound work”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "Threads and processes: threading; multiprocessing"
       content: >-
+
         ### Intuitive explanation
 
         Asynchrony, from the previous topic, is one waiter deftly juggling
@@ -893,84 +910,111 @@ topics:
 
         ```python
 
+
         import threading
+
 
         counter = 0
 
+
         lock = threading.Lock()
 
+
         def worker():
+
             global counter
+
             for _ in range(100000):
+
                 with lock:
+
                     counter += 1
+
 
         threads = [threading.Thread(target=worker) for _ in range(4)]
 
+
         for t in threads:
+
             t.start()
+
         for t in threads:
+
             t.join()
 
-        print("потоків:", len(threads))
 
-        print("очікуємо:", 4 * 100000)
+        print("threads:", len(threads))
+
+
+        print("expected:", 4 * 100000)
+
 
         print("counter:", counter)
 
-        ```Output:
 
         ```
 
-        потоків: 4
+        **Output:**
 
-        очікуємо: 400000
+
+        ```
+
+
+        threads: 4
+
+        expected: 400000
 
         counter: 400000
 
         ```
 
 
+
         ### Explanation of each line of the example
 
+
         - `lock = threading.Lock()` — we create a lock to protect the common
+
         `counter`.
 
+
         - `def worker()` with `global counter` — all threads change **one
+
         common** variable.
 
+
         - `with lock:` — we enter the critical section; while the lock is taken,
+
         other threads are waiting.
 
+
         - `counter += 1` — inside the lock, the increment is safe: no increment
+
         will be lost.
 
+
         - `Thread(target=worker)' — we create a thread that will execute
+
         `worker'.
+
 
         - `t.start()` — start streams; they run at the same time.
 
+
         - `t.join()` - the main program waits for each thread to finish, and
+
         only then does `counter` reliably set to `400000`.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"Four threads execute
-        counter += 1 100000 times each WITHOUT any Lock. What is the most likely
-        counter at the end?","options":["Exactly 400,000","Less than 400,000 and
-        different every time","More than 400,000","Always
-        0"],"answer":1,"explanation":"Without Lock, there is a data race.
-        counter += 1 is actually three steps (read, add, write). When threads do
-        them at the same time, some of the increments are erased: two threads
-        read the same number and write the same result, so one increment is
-        lost. Losses accumulate, and the total is LESS than 400,000, also
-        different with each run. That is why shared data is protected by
-        blocking."}
+        {"type":"prediction","lang":"python","question":"Four threads execute counter += 1 100000 times each WITHOUT any Lock. What is the most likely counter at the end?","options":["Exactly 400,000","Less than 400,000 and different every time","More than 400,000","Always 0"],"answer":1,"explanation":"Without Lock, there is a data race. counter += 1 is actually three steps (read, add, write). When threads do them at the same time, some of the increments are erased: two threads read the same number and write the same result, so one increment is lost. Losses accumulate, and the total is LESS than 400,000, also different with each run. That is why shared data is protected by blocking."}
 
         ```
+
 
 
         ### Typical mistakes of a beginner
@@ -995,17 +1039,9 @@ topics:
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: choose threads for I/O and processes for CPU-bound work.
 
-        ```python
-
-        async def load():
-            await fetch_data()
-            return "готово"
-        ```**Why it's here:** `await` relinquishes control while waiting,
-        allowing other asynchronous tasks to run.
-
-        **Note:** An asynchronous function must be executed or expected.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -1026,14 +1062,14 @@ topics:
         - python
   - title: "Virtual environments: venv; poetry; pip"
     key: virtualni-seredovyshcha-venv-poetry-pip
-    description: explain how parts of a program find and use each other. separate
-      application code from environment settings.
+    description: >-
+      After this topic, learners can create an isolated Python environment, install pinned dependencies, and verify the project interpreter.
     order: 36
-    exerciseFocus: "work through a single file and stdout if the theme does not have
-      a judgeable API; not require creating files or IDEs"
+    exerciseFocus: "Create a venv, install one pinned dependency, and verify sys.executable and the package version in that environment."
     theory:
       title: "Virtual environments: venv; poetry; pip"
       content: >-
+
         ### Intuitive explanation
 
         Imagine that project A needs a library version 1.0, and project B needs
@@ -1088,45 +1124,50 @@ topics:
 
         from importlib import metadata
 
-        # чи ми всередині віртуального середовища?
+        # are we inside a virtual environment?
 
         in_venv = sys.prefix != sys.base_prefix
 
-        print("у venv:", in_venv)
+        print("in venv:", in_venv)
 
-        # скільки пакетів встановлено в цьому середовищі
+        # number of packages installed in this environment
 
         pkgs = sorted(d.metadata["Name"] for d in metadata.distributions())
 
-        print("пакетів встановлено:", len(pkgs))
+        print("installed packages:", len(pkgs))
 
-        # версія конкретного пакета
+        # version of a specific package
 
         try:
             print("pip:", metadata.version("pip"))
         except metadata.PackageNotFoundError:
-            print("pip не знайдено")
-        ```Output (in system Python outside of venv):
+            print("pip not found")
 
         ```
 
-        у venv: False
+        Output (in system Python outside of venv):
 
-        пакетів встановлено: 2
+        ```
+
+        in venv: False
+
+        installed packages: 2
 
         pip: 26.1.2
 
-        ```Typical commands in the terminal (not Python code):
+        ```
+
+        Typical commands in the terminal (not Python code):
 
         ```
 
-        python -m venv .venv          # створити середовище
+        python -m venv .venv          # create the environment
 
-        .venv\Scripts\activate        # активувати (Windows)
+        .venv\Scripts\activate        # activate (Windows)
 
-        pip install requests          # встановити пакет у нього
+        pip install requests          # install a package into it
 
-        pip freeze > requirements.txt # зафіксувати залежності
+        pip freeze > requirements.txt # pin the dependencies
 
         ```
 
@@ -1158,19 +1199,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"spot-the-bug","lang":"python","question":"The developer
-        complains: he installed the library via pip, but import in the project
-        fails with ModuleNotFoundError. What did he do wrong?","lines":["# крок
-        1: створив середовище","python -m venv .venv","# крок 2: одразу
-        встановив пакет","pip install requests","# крок 3: запустив
-        проєкт","python app.py  # ModuleNotFoundError:
-        requests"],"buggyLine":4,"explanation":"Environment ACTIVATION was
-        skipped between venv creation and pip install. Without
-        .venv\\Scripts\\activate (or source .venv/bin/activate), the pip install
-        command puts the package in the system Python instead of the newly
-        created sandbox. The project starts... also without activation, so it
-        sees an empty venv. Rule: created → ACTIVATED → then pip install."}
+        {"type":"spot-the-bug","lang":"python","question":"The developer complains: he installed the library via pip, but import in the project fails with ModuleNotFoundError. What did he do wrong?","lines":["# step 1: create the environment","python -m venv .venv","# step 2: install the package immediately","pip install requests","# step 3: run the project","python app.py  # ModuleNotFoundError: requests"],"buggyLine":4,"explanation":"Environment ACTIVATION was skipped between venv creation and pip install. Without .venv\\Scripts\\activate (or source .venv/bin/activate), the pip install command puts the package in the system Python instead of the newly created sandbox. The project starts... also without activation, so it sees an empty venv. Rule: created → ACTIVATED → then pip install."}
 
         ```
 
@@ -1198,20 +1227,21 @@ topics:
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        Check which interpreter is active:
 
         ```python
 
-        python -m venv .venv
+        import sys
 
-        .venv\Scripts\activate
+        print(sys.prefix != sys.base_prefix)
 
-        ```**Why it's here:** An isolated environment or reproducible build
-        system captures dependencies and reduces the difference between
-        computers.
+        ```
 
-        **Note:** Do not confuse global dependencies with project-specific
-        dependencies.
+        Inside a created `venv`, the values differ. This confirms that the project interpreter is running.
+
+        **Task.** Create `.venv`, install one dependency from a pinned requirements list, and run the check with its interpreter. On Windows use `.venv\Scripts\python`; on macOS/Linux use `.venv/bin/python.
+
+        **Check.** Compare `sys.executable` and the package version in `.venv` with the global Python; explain how pinned dependencies help reproduce the environment.
 
         ### Summary
 
@@ -1229,17 +1259,18 @@ topics:
       tags:
         - tooling
         - python
-  - title: Logging in
+  - title: "Logging"
     key: lohuvannya
-    description: explain the main idea of ​​the topic in your own words. read a
-      short example and predict its outcome.
+    description: >-
+      After this topic, learners can set logging levels and formats, record contextual events, and avoid exposing secret values.
     order: 37
-    exerciseFocus: "one key idea of ​​Python with short deterministic stdout and
-      boundary case testing"
+    exerciseFocus: "Configure a named logger, record parameterized INFO and WARNING events, and verify that a secret is not included."
     theory:
       title: Logging in
       content: |-
+
         ### Intuitive explanation
+
         When a program does something wrong, the first reflex of a novice is `print("here")`, `print(x)`, `print("got here")`. This works - just as long as the program is small. In a real application, this approach turns into a disaster: `prints' clog the output, they are forgotten to be removed, and there is no way to turn off the "minor" messages, leaving the important ones. And when the program crashes at three o'clock in the morning on the server - where will you see those `prints'?
 
         The right tool is **logging** (the `logging` module). It's like an airplane logbook: the program keeps a record of what's going on with it, and you then read that logbook to figure out what went wrong. Unlike `print`, logs can be **filtered by importance**, sent to a file, supplemented with time and context - and all this is managed centrally, without editing the code in hundreds of places.
@@ -1247,6 +1278,7 @@ topics:
         The main idea is **levels of importance**. Not all messages are the same: `DEBUG' - small details for the developer, `INFO' - the usual course of affairs, `WARNING' - "something suspicious, but we live", `ERROR' - "an error occurred", `CRITICAL' - "everything is bad". Having set the threshold, you decide with one line what to see and what to hide.
 
         ### What happens at runtime
+
         `logging.basicConfig(level=logging.INFO, ...)` configures the system: sets **threshold** importance and **format** string. The `INFO' threshold means "show everything `INFO' level and higher" — i.e. `INFO', `WARNING', `ERROR', `CRITICAL' — but `DEBUG' (lower than the threshold) will be **silently rejected**. That is why there is no `log.debug(...)` line in the example output: it is in the code, but has not passed the filter. This is the superpower of logs — in production, you set the threshold to `WARNING' and see only problems, and during debugging, lower it to `DEBUG' and see everything, **without touching the code**.
 
         Messages are written through the logger object (`logging.getLogger("shop")`), calling the method of the corresponding level: `log.info(...)`, `log.error(...)`. The format `"%(levelname)s: %(message)s"` tells how the string will look - here is the level and the text; in real projects `%(asctime)s` (time) and `%(name)s` (name of the logger) are added.
@@ -1254,6 +1286,7 @@ topics:
         An important detail is **parameters through a comma**, not through the f-line: `log.info("%s bought for %s UAH", item, price)`. The logger will substitute the value itself, and then **only if** the message is actually output. This saves work: a discarded `DEBUG` will not even spend time compiling a line.
 
         ### Minimal code example
+
         ```python
         import logging
 
@@ -1264,23 +1297,27 @@ topics:
         log = logging.getLogger("shop")
 
         def buy(item, price):
-            log.debug("деталь: перевіряю ціну %s", price)
+            log.debug("debug: checking price %s", price)
             if price < 0:
-                log.error("від'ємна ціна для %s", item)
+                log.error("negative price for %s", item)
                 return
-            log.info("куплено %s за %s грн", item, price)
+            log.info("bought %s for %s UAH", item, price)
 
-        buy("книга", 250)
-        buy("ручка", -5)
-        log.warning("залишок на складі малий")
-        ```Output:
+        buy("book", 250)
+        buy("pen", -5)
+        log.warning("low stock")
         ```
-        INFO: куплено книга за 250 грн
-        ERROR: від'ємна ціна для ручка
-        WARNING: залишок на складі малий
+
+        **Output:**
+        ```
+
+        INFO: bought book for 250 UAH
+        ERROR: negative price for pen
+        WARNING: low stock
         ```
 
         ### Explanation of each line of the example
+
         - `basicConfig(level=logging.INFO, ...)` — set the threshold `INFO` and the format of the log line.
         - `log = logging.getLogger("shop")` is a named logger; the name helps distinguish sources in the journal.
         - `log.debug(...)` is below the threshold, so it is **not** (filtered) in the output.
@@ -1290,12 +1327,15 @@ topics:
         - `log.warning(...)` — the warning also passes the threshold and gets into the log.
 
         ### Try to predict
+
         ```interactive
 
         {"type":"prediction","lang":"python","question":"Logging.basicConfig(level=logging.WARNING) is set. Which of these calls will appear in the output?\n\nlog.debug(\"a\")\nlog.info(\"b\")\nlog.warning(\"c\")\nlog.error(\"d\")","options":["all four","only c and d","only d","only a and b"],"answer":1,"explanation":"The WARNING threshold means \"show WARNING level and ABOVE\". Order of importance: DEBUG < INFO < WARNING < ERROR < CRITICAL. So debug (a) and info (b) are below the threshold and are discarded, and warning (c) and error (d) are above the threshold and therefore are output. By changing one line level=..., you control the granularity without editing the code."}
+
         ```
 
         ### Typical mistakes of a beginner
+
         1. **Debug via `print`.** In serious code, `print` does not filter, has no levels, and does not write time. Use `logging` - you don't need to remove it, just change the threshold.
         2. **Compose messages with an f-string.** `log.debug(f"...{x}")` **always** generates a string, even when the log is discarded. Pass parameters via commas: `log.debug("...%s", x)`.
         3. **Log everything with `INFO' level.** Then filtering loses its meaning. Sort by importance: details - `DEBUG`, problems - `WARNING`/`ERROR`.
@@ -1304,17 +1344,39 @@ topics:
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
-        ```python
-        try:
-            value = int(text)
-        except ValueError:
-            value = 0
-        ```**Why it's here:** The expected format error is handled separately so the program can continue.
+        Configure a logger and check its output:
 
-        **Note:** Do not use an empty `except`.
+        ```python
+
+        import logging
+
+        logging.basicConfig(
+
+            level=logging.INFO,
+
+            format="%(levelname)s:%(message)s",
+
+            force=True,
+
+        )
+
+        log = logging.getLogger("shop")
+
+        log.info("order_id=%s status=%s", 42, "accepted")
+
+        log.warning("low_stock item=%s", "book")
+
+        ```
+
+
+        The logger emits two separate records, INFO followed by WARNING; verify each level and its message fields.
+
+        **Coding task.** Add an `ERROR` event with an order identifier; do not include a password, token, or full secret value in the message.
+
+        **Check.** Verify the level, format, and message fields. Change the threshold and explain which records were filtered.
 
         ### Summary
+
         You have replaced primitive `print` with full-fledged **logging**. The `logging' module keeps an "on-board log" of the application with the key advantage — **importance levels** (`DEBUG` < `INFO` < `WARNING` < `ERROR` < `CRITICAL`) and a **threshold** that in one line decides what to show: in production - only problems, during debugging - all details, and all this **without code editing**. Remember to pass parameters through commas (`log.info("%s", x)`), not f-string, configure `basicConfig` and do not log secrets. Logs are your eyes on a program running far away on a server. Next, how to make sure the code is correct at all: **testing**.
       level: 4
       tags:
@@ -1322,14 +1384,13 @@ topics:
         - python
   - title: "Testing: unittest; pytest"
     key: testuvannya-unittest-pytest
-    description: distinguish the cause of the error from its symptom. choose a
-      narrow test or test for a particular risk.
+    description: "After this topic, learners can write isolated automated tests with fixtures and assertions."
     order: 38
-    exerciseFocus: "reproduce one defect or verify one contract; the result must be
-      unambiguous for the auto-check"
+    exerciseFocus: "Write a short program demonstrating “write isolated automated tests with fixtures and assertions”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "Testing: unittest; pytest"
       content: >-
+
         ### Intuitive explanation
 
         You wrote a function, ran it once, saw the correct answer, and moved on.
@@ -1378,43 +1439,71 @@ topics:
 
         ```python
 
+
         import pytest
 
+
         def test_normal():
+
             assert discount(100, 20) == 80
+
         def test_invalid():
+
             with pytest.raises(ValueError):
+
                 discount(100, 150)
+
         ```
+
 
 
         ### Minimal code example
 
         ```python
 
+
         import unittest
 
+
         def discount(price, percent):
+
             if not 0 <= percent <= 100:
-                raise ValueError("відсоток має бути 0..100")
+
+                raise ValueError("percentage must be 0..100")
+
             return price * (1 - percent / 100)
 
+
         class TestDiscount(unittest.TestCase):
+
             def test_normal(self):
+
                 self.assertEqual(discount(100, 20), 80)
 
+
             def test_zero(self):
+
                 self.assertEqual(discount(50, 0), 50)
 
+
             def test_invalid(self):
+
                 with self.assertRaises(ValueError):
+
                     discount(100, 150)
 
+
         if __name__ == "__main__":
+
             unittest.main(verbosity=2)
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         test_invalid (__main__.TestDiscount.test_invalid) ... ok
 
@@ -1431,48 +1520,54 @@ topics:
         ```
 
 
+
         ### Explanation of each line of the example
 
+
         - `class TestDiscount(unittest.TestCase)` — test container; inheritance
+
         gives methods-assertions.
 
+
         - `def test_normal(self)` — the name from `test_` tells `unittest` that
+
         this is a test; a common case.
 
+
         - `self.assertEqual(discount(100, 20), 80)` - Assert: 20% discount from
+
         100 should give 80.
 
+
         - `def test_zero` — **borderline** case: zero percentage leaves the
+
         price unchanged.
 
+
         - `with self.assertRaises(ValueError):` - expect an incorrect percentage
+
         of 150 to throw an error.
 
+
         - `unittest.main(verbosity=2)` — runs all tests and prints a detailed
+
         summary.
 
+
         - three `ok' + `OK' — all checks have passed; if `discount` were hacked,
+
         the corresponding line would become `FAIL`.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"spot-the-bug","lang":"python","question":"The developer added a
-        test, but it never runs - usittest says 'Ran 1 test' instead of 2. Why
-        is the second method being ignored?","lines":["class
-        TestMath(unittest.TestCase):","    def
-        test_add(self):","        self.assertEqual(2 + 2, 4)","    def
-        check_sub(self):","        self.assertEqual(5 - 3,
-        2)"],"buggyLine":4,"explanation":"unittest only runs methods whose name
-        starts with 'test_'. The method is called check_sub, not test_sub, so
-        unittest does NOT consider it a test and silently skips it - hence 'Ran
-        1 test'. The most insidious thing is that there is no error: the test
-        simply does not run, creating a false sense of coverage. Rename to
-        test_sub."}
+        {"type":"spot-the-bug","lang":"python","question":"The developer added a test, but it never runs - usittest says 'Ran 1 test' instead of 2. Why is the second method being ignored?","lines":["class TestMath(unittest.TestCase):","    def test_add(self):","        self.assertEqual(2 + 2, 4)","    def check_sub(self):","        self.assertEqual(5 - 3, 2)"],"buggyLine":4,"explanation":"unittest only runs methods whose name starts with 'test_'. The method is called check_sub, not test_sub, so unittest does NOT consider it a test and silently skips it - hence 'Ran 1 test'. The most insidious thing is that there is no error: the test simply does not run, creating a false sense of coverage. Rename to test_sub."}
 
         ```
+
 
 
         ### Typical mistakes of a beginner
@@ -1496,18 +1591,9 @@ topics:
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: write isolated automated tests with fixtures and assertions.
 
-        ```python
-
-        try:
-            value = int(text)
-        except ValueError:
-            value = 0
-        ```**Why it's here:** The expected format error is handled separately so
-        the program can continue.
-
-        **Note:** Do not use an empty `except`.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -1528,14 +1614,13 @@ topics:
         - python
   - title: Profiling and debugging
     key: profilyuvannya-i-nalahodzhennya
-    description: distinguish the cause of the error from its symptom. choose a
-      narrow test or test for a particular risk.
+    description: "After this topic, learners can use a debugger and profiler to find a cause and a bottleneck."
     order: 39
-    exerciseFocus: "reproduce one defect or verify one contract; the result must be
-      unambiguous for the auto-check"
+    exerciseFocus: "Write a short program demonstrating “use a debugger and profiler to find a cause and a bottleneck”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Profiling and debugging
       content: >-
+
         ### Intuitive explanation
 
         The program works, but **slowly**. Where is the bottleneck? A novice
@@ -1583,91 +1668,117 @@ topics:
 
         ```python
 
+
         import timeit
+
 
         data_list = list(range(100000))
 
+
         data_set = set(data_list)
+
 
         target = 99999
 
+
         t_list = timeit.timeit(lambda: target in data_list, number=1000)
+
 
         t_set = timeit.timeit(lambda: target in data_set, number=1000)
 
-        print("пошук у list повільніший за set:", t_list > t_set)
 
-        print("прискорення разів (приблизно):", round(t_list / t_set) >= 50)
+        print("list lookup is slower than set:", t_list > t_set)
 
-        # скільки разів викликається функція — детерміновано
+
+        print("approximate speedup:", round(t_list / t_set) >= 50)
+
+
+        # deterministic function-call count
+
 
         calls = 0
 
+
         def fib(n):
+
             global calls
+
             calls += 1
+
             return n if n < 2 else fib(n - 1) + fib(n - 2)
+
 
         fib(15)
 
-        print("викликів fib(15):", calls)
 
-        ```Output:
+        print("call count for fib(15):", calls)
+
+
+        ```
+
+        **Output:**
+
 
         ```
 
-        пошук у list повільніший за set: True
 
-        прискорення разів (приблизно): True
+        list lookup is slower than set: True
 
-        викликів fib(15): 1973
+        approximate speedup: True
+
+        call count for fib(15): 1973
 
         ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `data_list` / `data_set` - same 100000 numbers in two structures for
+
         fair comparison.
 
+
         - `timeit.timeit(lambda: target in data_list, number=1000)` — measures
+
         the search in the list for 1000 repetitions.
 
+
         - `t_list > t_set` → `True` - measured: list search is **slower** than
+
         set search.
 
+
         - `round(t_list / t_set) >= 50` → `True` — the set is ten times faster
+
         (the exact number depends on the machine).
 
+
         - `def fib(n)` with `calls` counter — count how many times the function
+
         calls itself.
 
+
         - `fib(15)` - naive recursion that lists the same values ​​over and
+
         over.
 
+
         - `calls` → `1973` — **deterministic** number of calls; that's where the
+
         slowness that the profile would show is hiding.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"Why is searching for `x
-        in data` in a set of 100,000 elements ten times faster than in a list of
-        the same length?","options":["many store less data","the set is searched
-        through hashing - jump immediately to the desired place, and the list
-        goes through the elements one by one","the list is compressed and needs
-        to be unpacked","there is no difference, this is a measurement
-        error"],"answer":1,"explanation":"A list stores elements sequentially,
-        so `x in list` in the worst case iterates over ALL 100,000 elements one
-        at a time. The set is built on hashing: it calculates the hash of an
-        element and jumps immediately to the right cell, almost regardless of
-        size. Therefore, the search in set is almost instantaneous, and in list
-        - linear. This is a measurable fact, not a guess—that's the kind of
-        thing profiling detects."}
+        {"type":"prediction","lang":"python","question":"Why is searching for `x in data` in a set of 100,000 elements ten times faster than in a list of the same length?","options":["many store less data","the set is searched through hashing - jump immediately to the desired place, and the list goes through the elements one by one","the list is compressed and needs to be unpacked","there is no difference, this is a measurement error"],"answer":1,"explanation":"A list stores elements sequentially, so `x in list` in the worst case iterates over ALL 100,000 elements one at a time. The set is built on hashing: it calculates the hash of an element and jumps immediately to the right cell, almost regardless of size. Therefore, the search in set is almost instantaneous, and in list - linear. This is a measurable fact, not a guess—that's the kind of thing profiling detects."}
 
         ```
+
 
 
         ### Typical mistakes of a beginner
@@ -1693,18 +1804,9 @@ topics:
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: use a debugger and profiler to find a cause and a bottleneck.
 
-        ```python
-
-        try:
-            value = int(text)
-        except ValueError:
-            value = 0
-        ```**Why it's here:** The expected format error is handled separately so
-        the program can continue.
-
-        **Note:** Do not use an empty `except`.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -1724,15 +1826,15 @@ topics:
         - python
   - title: "Working with databases: sqlite3; SQLAlchemy"
     key: robota-z-bd-sqlite3-sqlalchemy
-    description: describe the boundary between the application and an external
-      service or resource. check data format, errors and missing values.
+    description: "After this topic, learners can run parameterized SQL queries and manage transactions."
     order: 40
-    exerciseFocus: "one operation with a format or resource; clearly record the
-      false and empty case"
+    exerciseFocus: "Write a short program demonstrating “run parameterized SQL queries and manage transactions”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "Working with databases: sqlite3; SQLAlchemy"
       content: |-
+
         ### Intuitive explanation
+
         Until now, your data disappeared when the program ended, and files (text, JSON) are only good for small volumes: try to find one user among a million lines in a text file - you have to read the whole file. When there is a lot of data and it is necessary to **quickly search, filter, sort**, use a **database**.
 
         The database is not just a storage, but a smart card file with its own query language - **SQL**. Instead of "read the entire file and find what you need" you tell the database: `SELECT name FROM users WHERE age >= 20' - "give the names of those who are 20+". The base itself, effectively, with indexes, finds and returns only what is needed. You describe **what** you want, and **how** to find it is the concern of the base.
@@ -1740,6 +1842,7 @@ topics:
         The best thing for a beginner is **SQLite**: it is already built into Python (`sqlite3`), does not require a separate server, and stores the entire database in one file. Perfect to learn. And for large projects, they take server databases (PostgreSQL, MySQL), but the SQL language and principles are the same.
 
         ### What happens at runtime
+
         Working with the database is always three steps: **connect**, **execute requests**, **close**. `sqlite3.connect(":memory:")` creates a database directly in memory (the path would be specified for the file). Through the connection, a **cursor** is taken — an object used to execute SQL and read the results.SQL commands are divided into two groups. **Changes** (`CREATE`, `INSERT`, `UPDATE`, `DELETE`) change the data, and after them you need `conn.commit()` - "confirm, save changes". Without `commit`, the changes will remain uncommitted and will be lost. **Readers** (`SELECT`) return strings: `cur.fetchall()` returns all, `cur.fetchone()` returns one.
 
         The most important security rule is **parameters through `?`**, not string concatenation. The `cur.execute("... WHERE age >= ?", (20,))` statement passes the value separately from the query text. This protects against **SQL injection** — an attack where an attacker slips a piece of SQL into an input field and steals or erases data. Never insert a value into a query via an f-string; always `?`.
@@ -1748,10 +1851,11 @@ topics:
         ```python
         from sqlalchemy import select
         users = session.scalars(select(User).where(User.age >= 20)).all()
-        # рядки таблиці приходять як об'єкти User, без ручного SQL
+        # table rows are returned as User objects, without manual SQL
         ```
 
         ### Minimal code example
+
         ```python
         import sqlite3
 
@@ -1760,9 +1864,9 @@ topics:
 
         cur.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)")
 
-        cur.execute("INSERT INTO users (name, age) VALUES (?, ?)", ("Оля", 20))
+        cur.execute("INSERT INTO users (name, age) VALUES (?, ?)", ("Olha", 20))
         cur.executemany("INSERT INTO users (name, age) VALUES (?, ?)",
-                        [("Іван", 25), ("Ліда", 19)])
+                        [("Ivan", 25), ("Lida", 19)])
         conn.commit()
 
         cur.execute("SELECT name, age FROM users WHERE age >= ? ORDER BY age", (20,))
@@ -1771,16 +1875,20 @@ topics:
 
         cur.execute("SELECT COUNT(*), AVG(age) FROM users")
         count, avg = cur.fetchone()
-        print("усього:", count, "середній вік:", avg)
+        print("total:", count, "average age:", avg)
         conn.close()
-        ```Output:
         ```
-        Оля 20
-        Іван 25
-        усього: 3 середній вік: 21.333333333333332
+
+        **Output:**
+        ```
+
+        Olha 20
+        Ivan 25
+        total: 3 average age: 21.333333333333332
         ```
 
         ### Explanation of each line of the example
+
         - `sqlite3.connect(":memory:")` — connection to the database in memory; Cursor is a query tool.
         - `CREATE TABLE users (...)` — we describe the structure of the table: columns and types.
         - `INSERT ... VALUES (?, ?)` from `("Olya", 20)` — we add a line, values ​​through `?` (safe).
@@ -1790,12 +1898,15 @@ topics:
         - `SELECT COUNT(*), AVG(age)` — the database counts aggregates; average of 20, 25, 19 = 21.33.
 
         ### Try to predict
+
         ```interactive
 
-        {"type":"spot-the-bug","lang":"python","question":"The code works, but is considered unsafe and will be closed for code review. What's the hole?","lines":["name = input('Ім'я для пошуку: ')","query = f\"SELECT * FROM users WHERE name = '{name}'\"","cur.execute(query)","print(cur.fetchall())"],"buggyLine":2,"explanation":"The name value is inserted directly into the SQL text via the f-string — this is a classic SQL INJECTION. If the user enters something like ' OR '1'='1, the query will change and return all users; worse inputs can wipe out the table. It is correct to pass values ​​separately through a placeholder: cur.execute(\"SELECT * FROM users WHERE name = ?\", (name,)). Then the data is never confused with the request code."}
+        {"type":"spot-the-bug","lang":"python","question":"The code works, but is considered unsafe and will be closed for code review. What's the hole?","lines":["name = input(\"Name to search: \")","query = f\"SELECT * FROM users WHERE name = '{name}'\"","cur.execute(query)","print(cur.fetchall())"],"buggyLine":2,"explanation":"The name value is inserted directly into the SQL text via the f-string — this is a classic SQL INJECTION. If the user enters something like ' OR '1'='1, the query will change and return all users; worse inputs can wipe out the table. It is correct to pass values ​​separately through a placeholder: cur.execute(\"SELECT * FROM users WHERE name = ?\", (name,)). Then the data is never confused with the request code."}
+
         ```
 
         ### Typical mistakes of a beginner
+
         1. **Paste values into SQL.** `f"... WHERE name = '{name}'"` opens **SQL injection**. Always pass the value via `?` as a separate argument.
         2. **Forget `commit()`.** Changes without a commit won't be saved - they won't be there after a restart. Reading (`SELECT`) does not require a commit.
         3. **Do not close the connection.** An open connection holds resources and may leave the file locked. Close with `conn.close()` (or via `with`).
@@ -1807,11 +1918,18 @@ topics:
         A small fragment to understand the idea of ​​the topic:
         ```python
         cursor.execute("SELECT name FROM users WHERE id = ?", (user_id,))
-        ```**Why it's here:** External data is separated from the command and the result must be checked before use.
+        ```
+
+        **Why it's here:** External data is separated from the command and the result must be checked before use.
 
         **Note:** Do not paste SQL or URLs with unvalidated custom text.
 
+        **Coding task.** Implement a short program or code snippet that demonstrates: run parameterized SQL queries and manage transactions.
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
+
         You learned how to store data in a **database** and retrieve it using the **SQL** language: you describe **what** you want (`SELECT ... WHERE ... ORDER BY'), and the database effectively searches for itself. Built-in **SQLite** (`sqlite3`) is a perfect start: connection → cursor → queries → `commit` for changes → `close`. The most important security rule is to pass the value through the `?` placeholder, and not paste with an f-string, so as not to open **SQL-injection**. Don't forget to `commit()` after changes and trust the database with filtering and aggregates instead of manual loops. In large projects, **ORM** (SQLAlchemy) is placed on top of the database. Next is the lower level of the network, under HTTP: **sockets**.
       level: 4
       tags:
@@ -1819,15 +1937,15 @@ topics:
         - python
   - title: "Network programming: sockets"
     key: merezheve-prohramuvannya-sokety
-    description: describe the boundary between the application and an external
-      service or resource. check data format, errors and missing values.
+    description: "After this topic, learners can build a socket client with timeouts, message framing, and disconnect handling."
     order: 41
-    exerciseFocus: "one operation with a format or resource; clearly record the
-      false and empty case"
+    exerciseFocus: "Write a short program demonstrating “build a socket client with timeouts, message framing, and disconnect handling”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "Network programming: sockets"
       content: |-
+
         ### Intuitive explanation
+
         In the topic about HTTP, you used high-level tools: `urlopen`, `requests`. But underneath all of that—underneath every site, chat, online game—lies a foundation, **sockets**. This is the lowest level of network communication, a "raw pipe" through which two computers exchange bytes. HTTP, e-mail, video calls are all extensions on top of sockets.
 
         The best analogy is a **phone conversation**. One side (**server**) has a known number and is **waiting** for a call. The other side (**client**) dials this number — and a connection is established. Then both can talk and listen until someone hangs up. The "number" here is the IP address plus the **port** (eg `127.0.0.1:9099`): the address points to the computer, the port to the specific program on it.
@@ -1835,11 +1953,13 @@ topics:
         Understanding sockets is useful even if you never write directly to them. It removes the magic: you see that the "internet" is not magic, but an orderly exchange of bytes over a connection, and every "connection refused" or "address in use" error after that becomes clear.
 
         ### What happens at runtime
+
         Sockets work according to a clear choreography. The **Server** takes four steps: `bind' — "occupy" the address and port; `listen` - start listening; `accept` — **block** and wait for someone to connect (as soon as the client arrives, `accept` returns a new connection). **The client** takes one step - `connect` to the server address. After that, the connection is established and the dialogue begins.Data exchange is `sendall` (send) and `recv` (receive). Critical detail: **sockets transfer bytes, not text**. Therefore, before sending, the string is encoded (`.encode("utf-8")`), and the received one is decoded (`.decode("utf-8")`). `recv(1024)` says "receive up to 1024 bytes at a time".
 
         Herein lies the main pitfall for newbies: **the byte stream has no message boundaries**. The network can "glue" your two `sendalls' into one `recv' or, conversely, break one message into several pieces. One `recv` does not guarantee that you received exactly one whole message. Therefore, real protocols (like HTTP) agree on where the message ends - with a length or a delimiter. In the example below, the server and client live in the same program on different threads and exchange short strings, so it doesn't interfere.
 
         ### Minimal code example
+
         ```python
         import socket
         import threading
@@ -1852,7 +1972,7 @@ topics:
             conn, addr = srv.accept()
             data = conn.recv(1024)
             text = data.decode("utf-8")
-            conn.sendall(f"привіт, {text}!".encode("utf-8"))
+            conn.sendall(f"hello, {text}!".encode("utf-8"))
             conn.close()
             srv.close()
 
@@ -1861,17 +1981,21 @@ topics:
 
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client.connect(("127.0.0.1", 9099))
-        client.sendall("Оля".encode("utf-8"))
+        client.sendall("Olha".encode("utf-8"))
         answer = client.recv(1024).decode("utf-8")
-        print("сервер відповів:", answer)
+        print("server replied:", answer)
         client.close()
         t.join()
-        ```Output:
         ```
-        сервер відповів: привіт, Оля!
+
+        **Output:**
+        ```
+
+        server replied: hello, Olha!
         ```
 
         ### Explanation of each line of the example
+
         - `socket.socket(AF_INET, SOCK_STREAM)` — we create a TCP socket (reliable connection over IP).
         - `srv.bind(("127.0.0.1", 9099))` - the server takes the address and port (its "phone number").
         - `srv.listen(1)` + `srv.accept()` — listen and **wait** for a call; `accept` is blocked before connecting.
@@ -1881,12 +2005,15 @@ topics:
         - `client.recv(1024).decode(...)` — we receive a response and read ``Hello, Olya!''.
 
         ### Try to predict
+
         ```interactive
 
-        {"type":"trace","lang":"python","caption":"Choreography of the client-server connection","code":["srv.bind(('127.0.0.1', 9099))","srv.listen(1)","conn, addr = srv.accept()","client.connect(('127.0.0.1', 9099))","client.sendall(b'Оля')","data = conn.recv(1024)","conn.sendall(b'...')","answer = client.recv(1024)"],"steps":[{"line":1,"vars":{},"note":"the server takes the address and port"},{"line":2,"vars":{},"note":"starts listening"},{"line":3,"vars":{},"note":"accept BLOCKS — waiting for the client"},{"line":4,"vars":{},"note":"the client connects — accept is unlocked"},{"line":5,"vars":{},"note":"the client sends bytes"},{"line":6,"vars":{"data":"b'\\xd0\\x9e\\xd0\\xbb\\xd1\\x8f'"},"note":"the server accepts bytes (this is 'Olya' in utf-8)"},{"line":7,"vars":{},"note":"the server sends a response"},{"line":8,"vars":{"answer":"b'...'"},"note":"the client receives a response; dialogue is complete"}]}
+        {"type":"trace","lang":"python","caption":"Choreography of the client-server connection","code":["srv.bind(('127.0.0.1', 9099))","srv.listen(1)","conn, addr = srv.accept()","client.connect(('127.0.0.1', 9099))","client.sendall(b'Olha')","data = conn.recv(1024)","conn.sendall(b'...')","answer = client.recv(1024)"],"steps":[{"line":1,"vars":{},"note":"the server takes the address and port"},{"line":2,"vars":{},"note":"starts listening"},{"line":3,"vars":{},"note":"accept BLOCKS — waiting for the client"},{"line":4,"vars":{},"note":"the client connects — accept is unlocked"},{"line":5,"vars":{},"note":"the client sends bytes"},{"line":6,"vars":{"data":"b'Olha'"},"note":"the server receives the same ASCII bytes"},{"line":7,"vars":{},"note":"the server sends a response"},{"line":8,"vars":{"answer":"b'...'"},"note":"the client receives a response; dialogue is complete"}]}
+
         ```
 
         ### Typical mistakes of a beginner
+
         1. **Send text instead of bytes.** `sendall("text")` will fail - the socket only accepts bytes. Always `.encode("utf-8")` before sending and `.decode("utf-8")` after receiving.
         2. **Assume that one `recv` = one message.** The byte stream has no bounds; messages may stick together or break up. Agree on limits (length/separator).
         3. **Address already in use.** The port remains busy after the previous start. Saves `setsockopt(..., SO_REUSEADDR, 1)`.
@@ -1905,15 +2032,20 @@ topics:
 
         print(wire_data)
 
-        ```**Why it's here:** The socket transfers bytes, so the text must be explicitly encoded before `sendall`.
+        ```
+
+        **Why it's here:** The socket transfers bytes, so the text must be explicitly encoded before `sendall`.
 
 
 
         **Note:** On the other end of the connection, use `decode("utf-8")` and the agreed message format.
 
+        **Coding task.** Implement a short program or code snippet that demonstrates: build a socket client with timeouts, message framing, and disconnect handling.
 
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
+
         You've looked under the hood of the network — at **sockets**, the "raw pipe" for exchanging bytes on which HTTP, mail, and everything else is built. The model is a telephone conversation: **server** takes address and port (`bind`, `listen`) and waits (`accept`), **client** connects (`connect`), and then both exchange via `sendall`/`recv`. Two key lessons: sockets transfer **bytes**, so text must be encoded/decoded; and the byte stream **has no message boundaries**, so the protocols themselves negotiate where the message ends. Understanding sockets takes the magic out of networking code. Next, we move into the world of calculations and data: **NumPy**.
       level: 4
       tags:
@@ -1921,15 +2053,13 @@ topics:
         - python
   - title: NumPy - the basics
     key: numpy-osnovy
-    description: transform data into a form that is convenient to work with. read
-      the result of the calculation without confusing it with an arbitrary
-      visualization.
+    description: "After this topic, learners can set NumPy array shape and dtype and perform vectorized operations."
     order: 42
-    exerciseFocus: "one data transformation with a small deterministic set; explain
-      what exactly is being measured"
+    exerciseFocus: "Write a short program demonstrating “set NumPy array shape and dtype and perform vectorized operations”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: NumPy - the basics
       content: >-
+
         ### Intuitive explanation
 
         Try adding two lists of numbers element by element: `[1,2,3] +
@@ -1972,108 +2102,146 @@ topics:
 
         ```python
 
+
         import numpy as np
+
 
         a = np.array([1, 2, 3, 4])
 
+
         b = np.array([10, 20, 30, 40])
 
-        print(a + b)        # [11 22 33 44] — без циклу
+
+        print(a + b)        # [11 22 33 44] — no loop
+
 
         print(a * 2)        # [2 4 6 8]
 
-        print(a.dot(b))     # 300 — скалярний добуток
+
+        print(a.dot(b))     # 300 — dot product
+
 
         print(b.mean(), b.std())  # 25.0 11.18...
 
-        ```No `for' - array operations are read as formulas. This is
+
+        ```
+
+        No `for' - array operations are read as formulas. This is
+
         **vectorization**: thinking in arrays, not elements.
+
 
         ### Minimal code example
 
+
         ```python
+
 
         import statistics
 
+
         a = [1, 2, 3, 4]
+
 
         b = [10, 20, 30, 40]
 
-        # поелементне додавання БЕЗ NumPy — треба цикл
+
+        # element-wise addition WITHOUT NumPy — requires a loop
+
 
         c = [a[i] + b[i] for i in range(len(a))]
 
-        print("сума:", c)
 
-        # множення кожного елемента на число — знову цикл
+        print("sum:", c)
+
+
+        # multiply each element by a number — another loop
+
 
         doubled = [x * 2 for x in a]
 
-        print("подвоєно:", doubled)
 
-        # статистика через стандартний модуль
+        print("doubled:", doubled)
 
-        print("середнє:", statistics.mean(b))
 
-        print("ст. відхилення:", round(statistics.pstdev(b), 2))
+        # statistics with the standard library module
 
-        # скалярний добуток вручну
+
+        print("mean:", statistics.mean(b))
+
+
+        print("std. deviation:", round(statistics.pstdev(b), 2))
+
+
+        # manual dot product
+
 
         dot = sum(a[i] * b[i] for i in range(len(a)))
 
-        print("скалярний добуток:", dot)
 
-        ```Output:
+        print("dot product:", dot)
+
+
+        ```
+
+        **Output:**
+
 
         ```
 
-        сума: [11, 22, 33, 44]
 
-        подвоєно: [2, 4, 6, 8]
+        sum: [11, 22, 33, 44]
 
-        середнє: 25
+        doubled: [2, 4, 6, 8]
 
-        ст. відхилення: 11.18
+        mean: 25
 
-        скалярний добуток: 300
+        std. deviation: 11.18
+
+        dot product: 300
 
         ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `[a[i] + b[i] for i in range(len(a))]` — element-by-element addition
+
         **by hand**; NumPy would do this as `a + b`.
 
+
         - `[x * 2 for x in a]` — multiplication of each element through a loop;
+
         in NumPy it's just `a * 2`.
 
+
         - `statistics.mean(b)` → `25` — mean by standard module (without
+
         third-party libraries).
+
 
         - `statistics.pstdev(b)` → `11.18` — population standard deviation.
 
+
         - `sum(a[i] * b[i] for i in range(len(a)))` → `300` — manual scalar
+
         product; in NumPy it is `a.dot(b)`.
+
 
         - the entire block illustrates **how many** cycles vectorization takes.
 
+
         ### Try to predict
+
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"In pure Python (WITHOUT
-        NumPy), what will print([1, 2, 3] + [4, 5, 6]) print?","options":["[5,
-        7, 9]","[1, 2, 3, 4, 5, 6]","a
-        mistake","21"],"answer":1,"explanation":"For regular Python lists, the +
-        operator means CONCATENATION (gluing), not element-by-element addition.
-        Therefore, it turns out [1, 2, 3, 4, 5, 6], and not [5, 7, 9]. To add
-        element-by-element, you need a loop or a NumPy array, where a + b gives
-        exactly [5, 7, 9]. This difference is the main reason why NumPy is used
-        for numerical calculations."}
+        {"type":"prediction","lang":"python","question":"In pure Python (WITHOUT NumPy), what will print([1, 2, 3] + [4, 5, 6]) print?","options":["[5, 7, 9]","[1, 2, 3, 4, 5, 6]","a mistake","21"],"answer":1,"explanation":"For regular Python lists, the + operator means CONCATENATION (gluing), not element-by-element addition. Therefore, it turns out [1, 2, 3, 4, 5, 6], and not [5, 7, 9]. To add element-by-element, you need a loop or a NumPy array, where a + b gives exactly [5, 7, 9]. This difference is the main reason why NumPy is used for numerical calculations."}
 
         ```
+
 
 
         ### Typical mistakes of a beginner
@@ -2101,27 +2269,50 @@ topics:
 
         ```python
 
+
         import numpy as np
+
 
         values = np.array([1, 2, 3])
 
+
         doubled = values * 2
 
-        ```**Why it's here:** NumPy performs an operation on the entire array
+
+        ```
+
+        **Why it's here:** NumPy performs an operation on the entire array
+
         without Python's manual loop.
+
 
         **Note:** The shape and dtype of the array affect the result.
 
+
+        **Coding task.** Implement a short program or code snippet that demonstrates: set NumPy array shape and dtype and perform vectorized operations.
+
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
 
+
         You understand **why** NumPy exists: pure Python processes numbers one
+
         by one through slow loops (and `+` lists generally glue, not add), while
+
         NumPy-array `ndarray` gives **vectorization** — operations on the entire
+
         array at once, written as math (`a + b`, `a * 2`, `a.dot(b)`) and
+
         performed by lightning-fast compiled code. You've seen on the stdlib how
+
         many manual loops this removes. Rule of thumb: think **arrays, not
+
         elements**, keep the data homogeneous in the array, and use NumPy where
+
         the data is abundant. This is the foundation of all data science. Next
+
         is an extension to NumPy for tables: **Pandas**.
       level: 4
       tags:
@@ -2129,15 +2320,13 @@ topics:
         - python
   - title: Pandas - the basics
     key: pandas-osnovy
-    description: transform data into a form that is convenient to work with. read
-      the result of the calculation without confusing it with an arbitrary
-      visualization.
+    description: "After this topic, learners can handle missing values and aggregate a DataFrame by groups."
     order: 43
-    exerciseFocus: "one data transformation with a small deterministic set; explain
-      what exactly is being measured"
+    exerciseFocus: "Write a short program demonstrating “handle missing values and aggregate a DataFrame by groups”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Pandas - the basics
       content: >-
+
         ### Intuitive explanation
 
         Imagine a table: rows - people, columns - name, city, salary. Typical
@@ -2183,11 +2372,13 @@ topics:
 
         df = pd.read_csv("data.csv")
 
-        print(df[df.city == "Київ"].name.tolist())   # ['Оля', 'Ліда']
+        print(df[df.city == "Kyiv"].name.tolist())   # ['Olha', 'Lida']
 
-        print(df.groupby("city").salary.mean())       # середня по містах
+        print(df.groupby("city").salary.mean())       # average by city
 
-        ```The same result, but instead of manual loops and dictionaries, there
+        ```
+
+        The same result, but instead of manual loops and dictionaries, there
         are declarative commands that read like a statement of intent.
 
         ### Minimal code example
@@ -2202,25 +2393,25 @@ topics:
 
         raw = """name,city,salary
 
-        Оля,Київ,40000
+        Olha,Kyiv,40000
 
-        Іван,Львів,35000
+        Ivan,Lviv,35000
 
-        Ліда,Київ,50000
+        Lida,Kyiv,50000
 
-        Петро,Львів,45000"""
+        Peter,Lviv,45000"""
 
         rows = list(csv.DictReader(io.StringIO(raw)))
 
-        print("рядків:", len(rows))
+        print("lines:", len(rows))
 
-        # фільтрація: лише Київ
+        # filtering: Kyiv only
 
-        kyiv = [r for r in rows if r["city"] == "Київ"]
+        kyiv = [r for r in rows if r["city"] == "Kyiv"]
 
-        print("з Києва:", [r["name"] for r in kyiv])
+        print("from Kyiv:", [r["name"] for r in kyiv])
 
-        # групування середньої зарплати по місту
+        # group mean salary by city
 
         by_city = defaultdict(list)
 
@@ -2228,18 +2419,21 @@ topics:
             by_city[r["city"]].append(int(r["salary"]))
 
         for city, salaries in by_city.items():
-            print(f"{city}: середня {mean(salaries):.0f}")
-        ```Output:
+            print(f"{city}: mean {mean(salaries):.0f}")
 
         ```
 
-        рядків: 4
+        Output:
 
-        з Києва: ['Оля', 'Ліда']
+        ```
 
-        Київ: середня 45000
+        lines: 4
 
-        Львів: середня 40000
+        from Kyiv: ['Olha', 'Lida']
+
+        Kyiv: mean 45000
+
+        Lviv: mean 40000
 
         ```
 
@@ -2268,18 +2462,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"The data from the CSV
-        is read into a list of rows dictionaries, where salary is a string. What
-        happens with sum(r[\"salary\"] for r in rows)?","options":["sum of
-        numbers","concatenated string or TypeError","average
-        value","0"],"answer":1,"explanation":"CSV returns ALL values ​​as
-        strings, so r[\"salary\"] is text like \"40000\". sum tries to add
-        strings: in Python it's either a TypeError (sum starts at 0 and can't
-        add a string to it) or, if you're adding strings together, a splicing.
-        It is correct to convert first: sum(int(r[\"salary\"]) for r in rows).
-        Pandas recognizes numeric columns automatically, but when reading CSV
-        manually, you have to take care of the types yourself."}
+        {"type":"prediction","lang":"python","question":"The data from the CSV is read into a list of rows dictionaries, where salary is a string. What happens with sum(r[\"salary\"] for r in rows)?","options":["sum of numbers","concatenated string or TypeError","average value","0"],"answer":1,"explanation":"CSV returns ALL values ​​as strings, so r[\"salary\"] is text like \"40000\". sum tries to add strings: in Python it's either a TypeError (sum starts at 0 and can't add a string to it) or, if you're adding strings together, a splicing. It is correct to convert first: sum(int(r[\"salary\"]) for r in rows). Pandas recognizes numeric columns automatically, but when reading CSV manually, you have to take care of the types yourself."}
 
         ```
 
@@ -2317,7 +2500,9 @@ topics:
 
         mean = frame["score"].mean()
 
-        ```**Why it's here:** A DataFrame stores tabular data, and column
+        ```
+
+        **Why it's here:** A DataFrame stores tabular data, and column
         selection allows you to perform aggregation.
 
         **Note:** Check gaps and column types before calculation.
@@ -2340,15 +2525,13 @@ topics:
         - python
   - title: "Visualization: Matplotlib; Seaborn"
     key: vizualizatsiya-matplotlib-seaborn
-    description: transform data into a form that is convenient to work with. read
-      the result of the calculation without confusing it with an arbitrary
-      visualization.
+    description: "After this topic, learners can choose a chart, label axes, and show scale without distorting the data."
     order: 44
-    exerciseFocus: "one data transformation with a small deterministic set; explain
-      what exactly is being measured"
+    exerciseFocus: "Write a short program demonstrating “choose a chart, label axes, and show scale without distorting the data”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "Visualization: Matplotlib; Seaborn"
       content: >-
+
         ### Intuitive explanation
 
         A table of twenty numbers - and you no longer see the meaning in it:
@@ -2392,124 +2575,162 @@ topics:
 
         ```python
 
+
         import matplotlib.pyplot as plt
+
 
         plt.bar(sales.keys(), sales.values())
 
-        plt.title("Продажі по місяцях")
 
-        plt.ylabel("тис. грн")
+        plt.title("Monthly sales")
 
-        plt.savefig("sales.png")   # зберегти графік у файл
 
-        ```The principle is the same - the values ​​are displayed in the height
-        of the columns - only the library draws them, not the `#' symbols.
+        plt.ylabel("thousand UAH")
 
-        ### Minimal code example
 
-        ```python
+        plt.savefig("sales.png")   # save the chart to a file
 
-        sales = {"Січ": 12, "Лют": 19, "Бер": 7, "Кві": 25, "Тра": 16}
-
-        # текстова стовпчикова діаграма БЕЗ бібліотек
-
-        peak = max(sales.values())
-
-        for month, value in sales.items():
-            bar = "#" * round(value / peak * 20)
-            print(f"{month} | {bar} {value}")
-
-        print()
-
-        # проста «іскра» (sparkline) з блокових символів
-
-        blocks = "▁▂▃▄▅▆▇█"
-
-        series = [3, 7, 2, 8, 5, 9, 4]
-
-        lo, hi = min(series), max(series)
-
-        spark = "".join(blocks[round((v - lo) / (hi - lo) * (len(blocks) - 1))]
-        for v in series)
-
-        print("тренд:", spark)
-
-        ```Output:
 
         ```
 
-        Січ | #######
+        The principle is the same - the values ​​are displayed in the height
+
+        of the columns - only the library draws them, not the `#' symbols.
+
+
+        ### Minimal code example
+
+
+        ```python
+
+
+        sales = {"Jan": 12, "Feb": 19, "Mar": 7, "Apr": 25, "May": 16}
+
+
+        # text bar chart WITHOUT libraries
+
+
+        peak = max(sales.values())
+
+
+        for month, value in sales.items():
+
+            bar = "#" * round(value / peak * 20)
+
+            print(f"{month} | {bar} {value}")
+
+
+        print()
+
+
+        # a simple sparkline made from block characters
+
+
+        blocks = "▁▂▃▄▅▆▇█"
+
+
+        series = [3, 7, 2, 8, 5, 9, 4]
+
+
+        lo, hi = min(series), max(series)
+
+
+        spark = "".join(blocks[round((v - lo) / (hi - lo) * (len(blocks) - 1))]
+
+        for v in series)
+
+
+        print("trend:", spark)
+
+
+        ```
+
+        **Output:**
+
+
+        ```
+
+
+        Jan | #######
 
 
         ### 12
 
-        Лют | ############
+        Feb | ############
 
 
         ### 19
 
-        Бер | ###
+        Mar | ###
 
 
         ### 7
 
-        Кві | #################
+        Apr | #################
 
 
         ### 25
 
-        Тра | ##########
+        May | ##########
 
 
         ### 16
 
-        тренд: ▂▆▁▇▄█▃
+        trend: ▂▆▁▇▄█▃
 
         ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `peak = max(sales.values())` — we find the maximum for scaling (the
+
         longest column).
 
+
         - `round(value / peak * 20)` — we translate the value into length: the
+
         proportion from the peak × width.
 
+
         - `"#" * ...` — repetition of the character draws a column of the
+
         required length.
+
 
         - `Kwi | #
 
 
+
         ### 25` — peak `25` gives full 20 characters; the rest are
+
         proportionally shorter.
+
 
         - `blocks = " ▂▃▄▅▆▇█"` — eight height levels for the thumbnail graph.
 
+
         - `(v - lo) / (hi - lo)` — **normalization** of the series in the range
+
         0..1 to choose the symbol level.
 
+
         - `trend: ▂▆ ▇▄█▃` — the form of the series `[3,7,2,8,5,9,4]' is visible
+
         at first glance.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"In the column length
-        formula round(value / peak * 20), value is equal to peak (maximum). How
-        many characters will the column
-        have?","options":["20","1","10","0"],"answer":0,"explanation":"When
-        value is equal to peak, the fraction value / peak = 1. Multiply by the
-        width: 1 * 20 = 20, round(20) = 20. That is, the largest value always
-        occupies the FULL width of the chart, and all others are proportionally
-        smaller. This is the essence of scaling: the peak sets the standard of
-        length, the rest is measured relative to it. This is how any bar chart
-        works, even if it's text, even if it's in Matplotlib."}
+        {"type":"prediction","lang":"python","question":"In the column length formula round(value / peak * 20), value is equal to peak (maximum). How many characters will the column have?","options":["20","1","10","0"],"answer":0,"explanation":"When value is equal to peak, the fraction value / peak = 1. Multiply by the width: 1 * 20 = 20, round(20) = 20. That is, the largest value always occupies the FULL width of the chart, and all others are proportionally smaller. This is the essence of scaling: the peak sets the standard of length, the rest is measured relative to it. This is how any bar chart works, even if it's text, even if it's in Matplotlib."}
 
         ```
+
 
 
         ### Typical mistakes of a beginner
@@ -2538,29 +2759,54 @@ topics:
 
         ```python
 
+
         import matplotlib.pyplot as plt
+
 
         plt.plot([1, 2, 3], [2, 4, 3])
 
+
         plt.show()
 
-        ```**Why it's here:** A graph shows the relationship between two
+
+        ```
+
+        **Why it's here:** A graph shows the relationship between two
+
         sequences; the data must be prepared for visualization.
+
 
         **Please note:** Visualization does not correct errors in input data.
 
+
+        **Coding task.** Implement a short program or code snippet that demonstrates: choose a chart, label axes, and show scale without distorting the data.
+
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
 
+
         You get the gist of **visualization**: turning numbers into shapes that
+
         the brain reads instantly. At the heart of any graph is the **display of
+
         data on visual values** through scaling: the values ​​are converted into
+
         a proportion from the maximum and the corresponding length or height is
+
         drawn. You saw this in action by building a bar chart and sparkline
+
         **without libraries**, with the symbols themselves. The main tool in
+
         practice is **Matplotlib** (and the **Seaborn** add-on), where real bars
+
         are drawn instead of `#`, but the principle remains the same. Don't
+
         forget to normalize the data, label the axes, and choose the appropriate
+
         graph type. Next is a brief overview of machine learning:
+
         **scikit-learn**.
       level: 4
       tags:
@@ -2568,15 +2814,13 @@ topics:
         - python
   - title: "ML (overview): scikit-learn - the basics"
     key: ml-ohlyad-scikit-learn-bazovi-ponyattya
-    description: transform data into a form that is convenient to work with. read
-      the result of the calculation without confusing it with an arbitrary
-      visualization.
+    description: "After this topic, learners can avoid train/test leakage and choose a metric for the task."
     order: 45
-    exerciseFocus: "one data transformation with a small deterministic set; explain
-      what exactly is being measured"
+    exerciseFocus: "Write a short program demonstrating “avoid train/test leakage and choose a metric for the task”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "ML (overview): scikit-learn - the basics"
       content: >-
+
         ### Intuitive explanation
 
         The classic program works according to the rules that **you**
@@ -2624,11 +2868,11 @@ topics:
 
         model = LinearRegression()
 
-        model.fit(train_X, train_y)          # навчання
+        model.fit(train_X, train_y)          # training
 
-        pred = model.predict([[90]])          # передбачення
+        pred = model.predict([[90]])          # prediction
 
-        # той самий цикл fit/predict, лише над масивами й з десятками алгоритмів
+        # the same fit/predict cycle, now over arrays and dozens of algorithms
 
         ```
 
@@ -2639,41 +2883,43 @@ topics:
 
         import statistics
 
-        # дані: площа квартири (кв.м) -> ціна (тис. у.о.)
+        # data: apartment area (m²) -> price (thousands of USD)
 
         area =  [30, 45, 60, 75, 90]
 
         price = [40, 58, 79, 101, 122]
 
-        # ділимо на навчальні й тестові дані
+        # split into training and test data
 
         train_x, train_y = area[:4], price[:4]
 
         test_x, test_y = area[4], price[4]
 
-        # "навчання": знаходимо пряму y = slope*x + intercept
+        # "training": fit the line y = slope*x + intercept
 
         slope, intercept = statistics.linear_regression(train_x, train_y)
 
-        print(f"модель: ціна = {slope:.2f} * площа + {intercept:.2f}")
+        print(f"model: price = {slope:.2f} * area + {intercept:.2f}")
 
-        # "передбачення" на небаченому прикладі
+        # "prediction" on an unseen example
 
         predicted = slope * test_x + intercept
 
-        print(f"площа {test_x}: передбачено {predicted:.1f}, реально {test_y}")
+        print(f"area {test_x}: predicted {predicted:.1f}, actual {test_y}")
 
-        print(f"похибка: {abs(predicted - test_y):.1f}")
-
-        ```Output:
+        print(f"error: {abs(predicted - test_y):.1f}")
 
         ```
 
-        модель: ціна = 1.36 * площа + -1.90
+        Output:
 
-        площа 90: передбачено 120.5, реально 122
+        ```
 
-        похибка: 1.5
+        model: price = 1.36 * area + -1.90
+
+        area 90: predicted 120.5, actual 122
+
+        error: 1.5
 
         ```
 
@@ -2705,18 +2951,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"The model showed an
-        error of 0 on the training data, but a huge error on the new test data.
-        What is it called?","options":["perfect model","overfitting — the model
-        learned the training data, not the regularity","insufficient
-        training","error in the code"],"answer":1,"explanation":"Zero error on
-        the training data, along with a large error on the new data, is a
-        classic sign of OVERFITTING. The model did not capture the general
-        regularity, but simply \"remembered\" the answers for training examples
-        (like cramming without understanding), so it is helpless on unseen data.
-        That is why the quality of the model is evaluated ONLY on individual
-        test data, and not on those where it was taught."}
+        {"type":"prediction","lang":"python","question":"The model showed an error of 0 on the training data, but a huge error on the new test data. What is it called?","options":["perfect model","overfitting — the model learned the training data, not the regularity","insufficient training","error in the code"],"answer":1,"explanation":"Zero error on the training data, along with a large error on the new data, is a classic sign of OVERFITTING. The model did not capture the general regularity, but simply \"remembered\" the answers for training examples (like cramming without understanding), so it is helpless on unseen data. That is why the quality of the model is evaluated ONLY on individual test data, and not on those where it was taught."}
 
         ```
 
@@ -2751,7 +2986,9 @@ topics:
 
         prediction = model.predict(X_test)
 
-        ```**Why it's here:** The model is trained on train data, and predict is
+        ```
+
+        **Why it's here:** The model is trained on train data, and predict is
         applied to individual test data.
 
         **Note:** Do not evaluate the model on the same data it was trained on.
@@ -2775,14 +3012,13 @@ topics:
         - python
   - title: "Web: Django - Basics"
     key: veb-django-osnovy
-    description: describe the boundary between the application and an external
-      service or resource. check data format, errors and missing values.
+    description: "After this topic, learners can connect a Django URL, view, and model and validate request data."
     order: 48
-    exerciseFocus: "one operation with a format or resource; clearly record the
-      false and empty case"
+    exerciseFocus: "Write a short program demonstrating “connect a Django URL, view, and model and validate request data”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "Web: Django - Basics"
       content: >-
+
         ### Intuitive explanation
 
         Flask and FastAPI are minimalists: they provide a core, and you choose
@@ -2826,106 +3062,151 @@ topics:
 
         ```python
 
+
         from django.db import models
 
+
         class Post(models.Model):
+
             title = models.CharField(max_length=200)
+
             views = models.IntegerField(default=0)
 
-        Post(title="Хіт", views=150).save()           # INSERT — без SQL
+
+        Post(title="Hit", views=150).save()           # INSERT — without SQL
+
 
         top = Post.objects.order_by("-views").all()    # SELECT ... ORDER BY
 
-        ```Compare with the example: all the manual SQL machinery in Django
+
+        ```
+
+        Compare with the example: all the manual SQL machinery in Django
+
         disappears - you just declare the fields, and `save()` and `objects` are
+
         provided by the framework itself.
+
 
         ### Minimal code example
 
+
         ```python
+
 
         import sqlite3
 
+
         class Post:
+
             _db = sqlite3.connect(":memory:")
+
             _db.execute("CREATE TABLE post (id INTEGER PRIMARY KEY, title TEXT, views INTEGER)")
 
+
             def __init__(self, title, views=0):
+
                 self.title = title
+
                 self.views = views
 
+
             def save(self):
+
                 cur = Post._db.execute(
+
                     "INSERT INTO post (title, views) VALUES (?, ?)", (self.title, self.views))
+
                 self.id = cur.lastrowid
 
+
             @classmethod
+
             def all(cls):
+
                 rows = cls._db.execute("SELECT title, views FROM post ORDER BY views DESC").fetchall()
+
                 return [cls(t, v) for t, v in rows]
 
-        Post("Перший пост", 10).save()
 
-        Post("Хіт", 150).save()
+        Post("First post", 10).save()
 
-        Post("Новина", 42).save()
+
+        Post("Hit", 150).save()
+
+
+        Post("News item", 42).save()
+
 
         for p in Post.all():
-            print(f"{p.title}: {p.views} переглядів")
-        ```Output:
+
+            print(f"{p.title}: {p.views} views")
 
         ```
 
-        Хіт: 150 переглядів
+        **Output:**
 
-        Новина: 42 переглядів
-
-        Перший пост: 10 переглядів
 
         ```
+
+
+        Hit: 150 views
+
+        News item: 42 views
+
+        First post: 10 views
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `class Post` with the `post` table is an embodiment of the ORM idea
+
         "class ↔ table".
 
+
         - `def __init__(self, title, views=0)` — object `Post` = one row of the
+
         future table.
 
+
         - `save()` — creates an `INSERT' from the fields of the object; this is
+
         what `.save()` does in Django.
 
+
         - `self.id = cur.lastrowid` — after saving, the object receives its
+
         `id`, as in a real ORM.
 
+
         - `@classmethod all()` — performs `SELECT ... ORDER BY views DESC` and
+
         returns objects.
 
+
         - `[cls(t, v) for t, v in rows]` — each row of the base is converted
+
         **back** to a `Post` object.
 
+
         - the output is sorted by views: ``Hit'' (150) is the first - this was
+
         done by `ORDER BY' in the database.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"What does
-        Post.objects.all() line conceptually mean in Django
-        ORM?","options":["create a new Post table","do something like SELECT *
-        FROM post and return the rows as Post objects","delete all Post
-        entries","connect to the database"],"answer":1,"explanation":"In Django
-        ORM, the model class corresponds to a table, and Post.objects is the
-        query manager for it. Post.objects.all() under the hood does something
-        like SELECT * FROM post, but returns not raw tuples, but handy Post
-        objects with (.title, .views) attributes. This is the essence of ORM:
-        you work with Python objects, and the SQL is generated automatically -
-        exactly what the all() method does in our example."}
+        {"type":"prediction","lang":"python","question":"What does Post.objects.all() line conceptually mean in Django ORM?","options":["create a new Post table","do something like SELECT * FROM post and return the rows as Post objects","delete all Post entries","connect to the database"],"answer":1,"explanation":"In Django ORM, the model class corresponds to a table, and Post.objects is the query manager for it. Post.objects.all() under the hood does something like SELECT * FROM post, but returns not raw tuples, but handy Post objects with (.title, .views) attributes. This is the essence of ORM: you work with Python objects, and the SQL is generated automatically - exactly what the all() method does in our example."}
 
         ```
+
 
 
         ### Typical mistakes of a beginner
@@ -2956,36 +3237,60 @@ topics:
 
         ```python
 
+
         from django.http import JsonResponse
+
 
 
 
         def health(request):
 
+
             return JsonResponse({"status": "ok"})
 
-        ```**Why it's here:** View turns an HTTP request into a response; JSON
+
+        ```
+
+        **Why it's here:** View turns an HTTP request into a response; JSON
+
         serialization is performed by `JsonResponse`.
 
 
 
+
         **Please note:** View needs to be connected to URLconf and running
+
         requires an installed Django project.
 
 
+        **Coding task.** Implement a short program or code snippet that demonstrates: connect a Django URL, view, and model and validate request data.
+
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
+
         You've been introduced to **Django**, a "batteries included" framework
+
         for large sites that provides database, admin, users, and security out
+
         of the box. Its heart is an **ORM** that embodies the idea of ​​**class
+
         = table, object = string**: you describe the model with a regular class,
+
         and `save()` and `objects.all()` hide the SQL behind self-explanatory
+
         objects. You modeled this idea by hand in `sqlite3` and saw how `save`
+
         generates an `INSERT` and `all` converts strings back to objects. Django
+
         is organized according to the **MVT** pattern and is indispensable when
+
         Flask would become chaos - but for tiny services it is overkill.
+
         Remember migrations and the N+1 problem. Next are background tasks
+
         outside the web: **queues and Celery**.
       level: 5
       tags:
@@ -2993,13 +3298,14 @@ topics:
         - python
   - title: "Turns and tasks: Celery; brokers (review)"
     key: cherhy-ta-zadachi-celery-brokery-ohlyad
-    description: explain the role of the queue | distinguish producer, broker and
-      worker | choose retry behavior
+    description: >-
+      After this topic, learners can describe how a Celery task moves through a producer, broker, and worker, choose retries, and identify idempotency needs.
     order: 17
-    exerciseFocus: "one deterministic problem with a clear outcome and a false scenario"
+    exerciseFocus: "Define a Celery task with one serializable ID and a result, reject an invalid ID, and explain safe retries and duplicate delivery."
     theory:
       title: "Turns and tasks: Celery; brokers (review)"
       content: >-
+
         ### Why is this topic needed?
 
         The queue separates the moment of acceptance of work from the moment of
@@ -3022,34 +3328,39 @@ topics:
 
         ### Minimal code example
 
+        A local task API example: eager mode runs it in this process, so it does not simulate a separate broker and worker.
+
         ```python
 
-        from queue import Queue
+        from celery import Celery
 
-        jobs = Queue()
+        app = Celery("demo", broker="memory://")
 
-        jobs.put({"task": "send_email", "attempt": 1})
+        app.conf.task_always_eager = True
 
-        job = jobs.get()
+        @app.task
 
-        try:
-            print("processing:", job["task"])
-        finally:
-            jobs.task_done()
+        def add(left, right):
+
+            return left + right
+
+        result = add.delay(2, 3)
+
+        print(result.get())
+
         ```
-
 
         ### Explanation of each line of the example
 
-        - Producer serializes arguments and creates messages.
+        - `Celery(...)` creates the task application and configures a broker transport.
 
-        - Broker delivers it to the worker.
+        - `@app.task` registers the function as a Celery task.
 
-        - Worker performs a function independently of the HTTP process.
+        - `.delay(2, 3)` submits the task through Celery’s task API.
 
-        - Retry can perform the task again, so idempotency is required.
+        - `task_always_eager = True` runs it locally, so no separate worker or broker delivery is tested here.
 
-        - Result backend and dead-letter policy define how to parse failures.
+        - `result.get()` reads the value returned by the task.
 
         ### Try to predict
 
@@ -3069,29 +3380,31 @@ topics:
 
         ### In practice
 
-        This snippet shows exactly where the topic construction is used in the
-        working scenario:
+        The task accepts a small serializable ID and returns a structured result:
 
         ```python
 
-        from queue import Queue
+        @app.task
 
-        jobs = Queue()
+        def process_order(order_id):
 
-        jobs.put({"task": "send_email", "attempt": 1})
+            if order_id <= 0:
 
-        job = jobs.get()
+                raise ValueError("order_id must be positive")
 
-        try:
-            print("processing:", job["task"])
-        finally:
-            jobs.task_done()
-        ```**Why this is here:** The task accepts an image_id, not the whole
-        file: the message remains small and repetitive. In the exercise, verify
-        that the rerun does not produce two identical final records.
+            return {"order_id": order_id, "status": "processed"}
 
-        **What to change yourself:** Start with the task contract: input,
-        output, tolerable error, number of retries and observation method.
+        result = process_order.delay(42)
+
+        print(result.get())
+
+        ```
+
+        **Why this matters:** In production, the producer sends an identifier through the broker and a separate worker executes the task. Redelivery can happen, so the operation must be idempotent.
+
+        **Task.** Define a stable idempotency key for `order_id`; identify which failures are safe to retry and which should be returned without retry.
+
+        **Check.** Check a valid and invalid ID and redeliver the same order; explain why the retry does not create a duplicate.
 
         ### Interactive self-check
 
@@ -3099,13 +3412,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"Why does retry in the
-        background task require idempotency?","options":["Retry always changes
-        the Python type","One logical operation can be performed more than
-        once","Broker cannot transmit numbers","A Worker always runs only
-        once"],"answer":1,"explanation":"A retry after a timeout or crash may
-        occur even when the first attempt partially completed."}
+        {"type":"prediction","lang":"python","question":"Why does retry in the background task require idempotency?","options":["Retry always changes the Python type","One logical operation can be performed more than once","Broker cannot transmit numbers","A Worker always runs only once"],"answer":1,"explanation":"A retry after a timeout or crash may occur even when the first attempt partially completed."}
 
         ```
 
@@ -3123,6 +3430,7 @@ topics:
     theory:
       title: "Documentation and code style: PEP 8; docstring"
       content: >-
+
         ### Why is this topic needed?
 
         Style reduces cognitive load, and documentation captures solutions that
@@ -3154,6 +3462,7 @@ topics:
             if total == 0:
                 raise ValueError("total must not be zero")
             return part / total * 100
+
         ```
 
 
@@ -3202,7 +3511,10 @@ topics:
             if total == 0:
                 raise ValueError("total must not be zero")
             return part / total * 100
-        ```**Why this is here:** Docstring captures assumptions that are not
+
+        ```
+
+        **Why this is here:** Docstring captures assumptions that are not
         apparent from a single formula. In the exercise, change the count or
         tax_rate contract and verify that the code, documentation, and test
         describe the same thing.
@@ -3216,13 +3528,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"What should a useful
-        public function docstring describe?","options":["Just the name of the
-        function","Contract: purpose, entry, result and important
-        exceptions","All operating system code","Passwords to
-        launch"],"answer":1,"explanation":"The documentation should help the
-        user to correctly call the function and understand its limitations."}
+        {"type":"prediction","lang":"python","question":"What should a useful public function docstring describe?","options":["Just the name of the function","Contract: purpose, entry, result and important exceptions","All operating system code","Passwords to launch"],"answer":1,"explanation":"The documentation should help the user to correctly call the function and understand its limitations."}
 
         ```
 
@@ -3240,6 +3546,7 @@ topics:
     theory:
       title: "Packaging and distribution: setuptools"
       content: >-
+
         ### Why is this topic needed?
 
         Packaging makes the code portable: another developer can install it with
@@ -3330,7 +3637,9 @@ topics:
 
         build-backend = "setuptools.build_meta"
 
-        ```**Why this is here:** Configuration makes dependencies part of the
+        ```
+
+        **Why this is here:** Configuration makes dependencies part of the
         artifact. In the exercise, assemble the wheel and install it in an empty
         venv — that's where you can see the difference between declared and
         random dependencies.
@@ -3344,14 +3653,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"Why is version included
-        in metadata even for a small package?","options":["So that Python knows
-        how to name the variables","To distinguish between releases and control
-        compatibility","To hide dependencies","To replace
-        tests"],"answer":1,"explanation":"The version allows you to reproduce
-        the state of the package and understand whether it is compatible with
-        the consumer."}
+        {"type":"prediction","lang":"python","question":"Why is version included in metadata even for a small package?","options":["So that Python knows how to name the variables","To distinguish between releases and control compatibility","To hide dependencies","To replace tests"],"answer":1,"explanation":"The version allows you to reproduce the state of the package and understand whether it is compatible with the consumer."}
 
         ```
 
@@ -3368,6 +3670,7 @@ topics:
     theory:
       title: "Security: .env secrets"
       content: >-
+
         ### Why is this topic needed?
 
         The password, API key and signing secret do not belong to the code.
@@ -3447,7 +3750,9 @@ topics:
 
         print("API key is configured")
 
-        ```**Why this is here:** The code only reports the fact that the key
+        ```
+
+        **Why this is here:** The code only reports the fact that the key
         exists, not its value. In the exercise, find all error paths and verify
         that none will log secret.
 
@@ -3461,13 +3766,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"Why is print(api_key)
-        unsafe even in a local instance?","options":["print does not work with
-        strings","The secret can be found in logs, stdout or CI artifacts","API
-        key must always be a number","This automatically deletes the
-        .env"],"answer":1,"explanation":"Output is often cached or forwarded, so
-        secret can get out of control."}
+        {"type":"prediction","lang":"python","question":"Why is print(api_key) unsafe even in a local instance?","options":["print does not work with strings","The secret can be found in logs, stdout or CI artifacts","API key must always be a number","This automatically deletes the .env"],"answer":1,"explanation":"Output is often cached or forwarded, so secret can get out of control."}
 
         ```
 
@@ -3485,6 +3784,7 @@ topics:
     theory:
       title: "Cloud/CLI (overview): boto3"
       content: >-
+
         ### Why is this topic needed?
 
         The SDK converts the network API of the cloud into Python objects, but
@@ -3514,7 +3814,7 @@ topics:
 
         print(client.meta.region_name)
 
-        # client.list_buckets() виконує реальний мережевий запит
+        # client.list_buckets() makes a real network request
 
         ```
 
@@ -3561,9 +3861,11 @@ topics:
 
         print(client.meta.region_name)
 
-        # client.list_buckets() виконує реальний мережевий запит
+        # client.list_buckets() makes a real network request
 
-        ```**Why it's here:** A fragment separates client creation and network
+        ```
+
+        **Why it's here:** A fragment separates client creation and network
         operation. This allows you to test the configuration without
         accidentally reading or changing the actual bucket.
 
@@ -3577,13 +3879,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"When does boto3 usually
-        make a real request to AWS?","options":["When importing any Python
-        file","When calling a client method such as list_buckets","When writing
-        the name region","Never, the SDK only works
-        locally"],"answer":1,"explanation":"The client creation prepares the
-        object, and the operation method calls the remote API."}
+        {"type":"prediction","lang":"python","question":"When does boto3 usually make a real request to AWS?","options":["When importing any Python file","When calling a client method such as list_buckets","When writing the name region","Never, the SDK only works locally"],"answer":1,"explanation":"The client creation prepares the object, and the operation method calls the remote API."}
 
         ```
 
@@ -3602,6 +3898,7 @@ topics:
     theory:
       title: Best practices and patterns
       content: >-
+
         ### Why is this topic needed?
 
         A pattern is only useful when it reduces complexity. The pattern name
@@ -3675,7 +3972,9 @@ topics:
 
         print(total_price([{"price": 10, "count": 2}], 0.2))
 
-        ```**Why this is here:** A function has explicit parameters and a single
+        ```
+
+        **Why this is here:** A function has explicit parameters and a single
         result, so it can be tested without a server, DB, or singleton. This is
         an example of useful simplicity, not a call to make each line a separate
         class.
@@ -3690,13 +3989,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"When is a pattern or
-        abstraction really justified?","options":["When the name sounds
-        complicated","When they reduce real complexity and have clear
-        accountability","When you can add more files","Always in any
-        function"],"answer":1,"explanation":"Abstraction should compensate for
-        its own complexity and make behavior easier to change or test."}
+        {"type":"prediction","lang":"python","question":"When is a pattern or abstraction really justified?","options":["When the name sounds complicated","When they reduce real complexity and have clear accountability","When you can add more files","Always in any function"],"answer":1,"explanation":"Abstraction should compensate for its own complexity and make behavior easier to change or test."}
 
         ```
 

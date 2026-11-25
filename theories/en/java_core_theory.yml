@@ -8,7 +8,9 @@ topics:
     theory:
       title: Introduction to Java
       content: |-
+
         ### Intuitive explanation
+
         Try explaining to an alien how to make a sandwich. "Take the bread" - and he takes the whole loaf. "Anoint with butter" - and he anoints with his palm. He's not stupid - he just doesn't know. A computer is exactly the same: a brilliant performer with zero intuition. It will do exactly what is written, and not a millimeter more.
 
         This is where the pain of the newbie comes in: you *think* one thing and write another - and the machine obediently does exactly what it says, not what you meant. **Programming** is the art of leaving no room for the computer to "guess." **Java** is one of the languages ​​in which these instructions are written so that they can be understood by a machine.
@@ -18,11 +20,13 @@ topics:
         No one forces you to write code with your bare hands in a notebook: there is an **IDE** — a workshop with an editor, a **Run** button and, most importantly, an assistant that highlights an error in red even before launch. The IDE doesn't think for you, but shines a flashlight where you just stepped on the rake.
 
         ### What happens at runtime
+
         And here is the main trick of Java, for which it is loved. Your `.java` text file is not directly executable. First, the `javac` compiler reads it according to all language rules and translates it into **bytecode** - a `.class` file. These are no longer English words, but concise commands for an imaginary, "virtual" computer.This imaginary computer is called **JVM** (Java Virtual Machine). It is he, not your processor directly, that reads the bytecode and executes it command by command, from top to bottom, starting with the `main` method. The chain is: `.java` → (javac) → `.class` → (JVM) → result.
 
         Why this extra link? For the sake of the famous slogan "write once - run anywhere". The bytecode is the same for everyone, and Windows, Linux, and macOS have their own JVM — so the same `.class` runs everywhere without rewriting. If an error is found at the compilation stage, `javac` will stop and show a string - this is not a punishment, but an exact address where to look.
 
         ### Minimal code example
+
         Tradition requires that the first program say hello to the world. Here it is in full:
         ```java
         public class Main {
@@ -30,18 +34,23 @@ topics:
                 System.out.println("Hello, World!");
             }
         }
-        ```Output:
         ```
+
+        **Output:**
+        ```
+
         Hello, World!
         ```
 
         ### Explanation of each line of the example
+
         - `public class Main {` is a shell. In Java, all code lives inside a class; for now, think of it as a mandatory ``box'' named `Main`.
         - `public static void main(String[] args) {` is the starting point. No matter how many methods there are in the program, the JVM always starts from here. This is the "first page" she opens.
         - `System.out.println("Hello, World!");` is the actual command: print the text with quotes to the console and move to a new line. A semicolon at the end is required, like a semicolon at the end of a sentence.
         - `}` — every open `{` must have a pair. There are two of them: we close `main', and then the class.
 
         ### Typical mistakes of a beginner
+
         1. **Forgotten semicolon** after the command — and the compiler stops because it doesn't see where the sentence ended.
         2. **Incorrect quotation marks.** Text is only in double `"..."`. Single `'...'' in Java mean something completely different (one character).
         3. **Confused case.** `System' and `system' are different words; Java is case sensitive.
@@ -49,9 +58,11 @@ topics:
         5. **Trying to speak "human language"** — write `show hello' instead of the real command. The machine does not guess intentions.
 
         ### Find the error
+
         ```interactive
 
         {"type":"spot-the-bug","lang":"java","question":"In which line is the error?","lines":["public class Main {","    public static void main(String[] args) {","        System.out.println(\"Hello\")","    }","}"],"buggyLine":3,"explanation":"A semicolon is missing after calling System.out.println(...). In Java, every command ends with the symbol ;"}
+
         ```
 
         ### In practice
@@ -59,27 +70,33 @@ topics:
         A small fragment to understand the idea of ​​the topic:
         ```java
         public static void main(String[] args) {
-            System.out.println("Привіт, світе!");
+            System.out.println("Hello, world!");
         }
-        ```**Why it's here:** `main` is the entry point of a Java program, and `println` outputs a string.
+        ```
+
+        **Why it's here:** `main` is the entry point of a Java program, and `println` outputs a string.
 
         **Note:** A compilation error is different from a runtime error.
 
+        **Coding task.** Implement a short program or code snippet that demonstrates: one short deterministic output without input; check exact stdout.
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
+
         So, the program is not magic, but precise instructions for the performer without intuition. You've seen the code path: `.java' is compiled into bytecode, which is executed on the JVM - hence the portability between systems. We disassembled the smallest possible program: a shell class, the `main` method as an entry point and `System.out.println` for output. The main thing to take away: the machine does what is written literally, so clarity and accuracy are not boring, but your main tool. Next, we will learn how to store data in variables.
       level: 1
       tags:
         - orientation
         - java
   - title: Data types and variables
-    description: recognize basic Java constructs in code. explain how the value
-      changes at runtime.
+    description: "After this topic, learners can choose a primitive type for its range and explain casting and overflow."
     order: 2
-    exerciseFocus: "one main topic operation; simple input or fixed example, no
-      unexplored libraries"
+    exerciseFocus: "Write a short program demonstrating “choose a primitive type for its range and explain casting and overflow”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Data types and variables
       content: >-
+
         ### Intuitive explanation
 
         Imagine a pantry with signed boxes: "apples only", "books only", "shoes
@@ -125,30 +142,48 @@ topics:
 
         ```java
 
+
         public class Main {
+
             public static void main(String[] args) {
+
                 int apples = 5;
+
                 double price = 2.5;
-                String name = "Оля";
+
+                String name = "Olha";
+
                 boolean isReady = true;
 
+
                 System.out.println(apples);
+
                 System.out.println(price);
+
                 System.out.println(name);
+
                 System.out.println(isReady);
-                System.out.println(5 / 2);   // увага: обидва числа цілі
+
+                System.out.println(5 / 2);   // note: both values are integers
+
             }
+
         }
 
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         5
 
         2.5
 
-        Оля
+        Olha
 
         true
 
@@ -157,52 +192,70 @@ topics:
         ```
 
 
+
         ### Explanation of each line of the example
+
 
         - `int apples = 5;` — integers (without a fraction).
 
+
         - `double price = 2.5;` — numbers with a fractional part.
+
 
         - `String name = "Olya";` — text; it is **always** in double quotes.
 
+
         - `boolean isReady = true;` — boolean "yes/no", only `true` or `false`
+
         (and only from a small letter).
 
+
         - `System.out.println(5 / 2);` — and the main surprise: `2`, not `2.5`.
+
         Both operands are integers, so Java counts the **integer** division and
+
         simply discards the fractional part. Want `2.5` - at least one number
+
         must be a fraction: `5.0 / 2`.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Put the wrong type.** Trying to put `"Olya"` in `int` doesn't even
+
         compile.
 
+
         2. **Forget quotation marks** around the text — and ``Olya'' is
+
         perceived as the name of a non-existent variable.
 
+
         3. **`True` instead of `true`.** In Java, logical values ​​are written
+
         with lowercase.
 
+
         4. **Expect `2.5` from `5 / 2`.** Division of two integers is always an
+
         integer.
 
+
         5. **Confuse case in names.** `isReady` and `IsReady` are two different
+
         variables.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"java","question":"What will
-        System.out.println(7 / 2 + \" and \" + 7.0 / 2); print?","options":["3.5
-        and 3.5","3 and 3.5","3.5 and 3","3 and 3"],"answer":1,"explanation":"7
-        / 2 is two integers, so integer division gives 3. And 7.0 / 2 has a
-        fractional operand, so the result is 3.5. The line \"3 and 3.5\" is
-        output."}
+        {"type":"prediction","lang":"java","question":"What will System.out.println(7 / 2 + \" and \" + 7.0 / 2); print?","options":["3.5 and 3.5","3 and 3.5","3.5 and 3","3 and 3"],"answer":1,"explanation":"7 / 2 is two integers, so integer division gives 3. And 7.0 / 2 has a fractional operand, so the result is 3.5. The line \"3 and 3.5\" is output."}
 
         ```
+
 
 
         ### In practice
@@ -211,38 +264,58 @@ topics:
 
         ```java
 
+
         String name = "Ada";
+
 
         int age = 36;
 
-        ```**Why it's here:** A declaration in Java contains the type, name, and
+
+        ```
+
+        **Why it's here:** A declaration in Java contains the type, name, and
+
         value of a variable.
 
+
         **Please note:** Choose a type based on the range and purpose of the
+
         data.
+
+
+        **Coding task.** Implement a short program or code snippet that demonstrates: choose a primitive type for its range and explain casting and overflow.
+
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
+
         You have broken down three concepts that easily merge into one: value
+
         (the data itself), variable (shortcut name), and type (the rule that is
+
         allowed to be stored). Saw the four working types - `int`, `double`,
+
         `String`, `boolean` - and realized that `=` means ``puts'' and not
+
         ``equals''. And the main lesson of the `5 / 2' trick: the type affects
+
         not only storage, but also the calculations themselves. Next, we will
+
         learn how to request values ​​from the user via `Scanner'.
       level: 1
       tags:
         - foundations
         - java
   - title: Scanner data entry
-    description: recognize basic Java constructs in code. explain how the value
-      changes at runtime.
+    description: "After this topic, learners can read tokens and lines with Scanner while handling the transition to nextLine()."
     order: 3
-    exerciseFocus: "one main topic operation; simple input or fixed example, no
-      unexplored libraries"
+    exerciseFocus: "Write a short program demonstrating “read tokens and lines with Scanner while handling the transition to nextLine()”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Scanner data entry
       content: >-
+
         ### Intuitive explanation
 
         Until now, your programs were like TV: they show something, but you
@@ -285,106 +358,131 @@ topics:
 
         ```java
 
+
         import java.util.Scanner;
 
+
         public class Main {
+
             public static void main(String[] args) {
+
                 Scanner scanner = new Scanner(System.in);
 
-                System.out.print("Як тебе звати? ");
+
+                System.out.print("What is your name? ");
+
                 String name = scanner.nextLine();
 
-                System.out.print("Скільки тобі років? ");
+
+                System.out.print("How old are you? ");
+
                 int age = scanner.nextInt();
 
-                System.out.println("Привіт, " + name + "! За рік тобі буде " + (age + 1) + ".");
+
+                System.out.println("Hello, " + name + "! Next year you will be " + (age + 1) + ".");
+
                 scanner.close();
+
             }
+
         }
+
 
         ```Output (the user typed ``Olya'', then ``12''):
 
-        ```
-
-        Як тебе звати? Оля
-
-        Скільки тобі років? 12
-
-        Привіт, Оля! За рік тобі буде 13.
 
         ```
+
+
+        What is your name? Olha
+
+        How old are you? 12
+
+        Hello, Olha! Next year you will be 13.
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `import java.util.Scanner;` — Scanner lives in the `java.util`
+
         package, so it must be included, otherwise the compiler will not find
+
         it.
 
+
         - `new Scanner(System.in)` — we create a scanner bound to `System.in`
+
         (keyboard).
 
+
         - `System.out.print(...)` is exactly `print`, not `println`: no line
+
         breaks so that the answer is next to the question.
 
+
         - `scanner.nextLine()` — reads the **entire** line (can be with spaces)
+
         — is perfect for the name.
 
+
         - `scanner.nextInt()` — takes an integer from the buffer; over the
+
         result we immediately count `age + 1`.
 
+
         - `scanner.close()` — release the resource; good tone when done with
+
         typing.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Forget `import java.util.Scanner;`** - and the class "does not
+
         exist".
 
+
         2. **`nextInt()` and the user entered text** - crash with
+
         `InputMismatchException`.
 
+
         3. **Confuse `next()` and `nextLine()`** - `next()` takes one word (up
+
         to a space), `nextLine()` takes the whole line.
 
+
         4. **Don't eat leftover Enter** after `nextInt()` - the next
+
         `nextLine()` will silently read the void.
 
+
         5. **Do not prompt for input format** - the user does not have to guess
+
         whether they want a number or a word.
+
 
         ### Find the error
 
+
         ```interactive
 
-
-        {"type":"spot-the-bug","lang":"java","question":"Why is name always
-        empty?","lines":["Scanner sc = new Scanner(System.in);","int age =
-        sc.nextInt();","String name = sc.nextLine();","System.out.println(\"[\"
-        + name + \"]\");"],"buggyLine":3,"explanation":"nextInt() reads a
-        number, but leaves the Enter character in the buffer. The next
-        nextLine() immediately encounters this Enter and returns an empty
-        string. We need to add an \"empty\" sc.nextLine() between lines 2 and 3
-        to finish the remainder."}
+        {"type":"spot-the-bug","lang":"java","question":"Why is name always empty?","lines":["Scanner sc = new Scanner(System.in);","int age = sc.nextInt();","String name = sc.nextLine();","System.out.println(\"[\" + name + \"]\");"],"buggyLine":3,"explanation":"nextInt() reads a number, but leaves the Enter character in the buffer. The next nextLine() immediately encounters this Enter and returns an empty string. We need to add an \"empty\" sc.nextLine() between lines 2 and 3 to finish the remainder."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: read tokens and lines with Scanner while handling the transition to nextLine().
 
-        ```java
-
-        Scanner scanner = new Scanner(System.in);
-
-        String name = scanner.nextLine();
-
-        ```**Why this is here:** `Scanner` reads standard input and `nextLine()`
-        returns the entire line.
-
-        **Note:** Do not confuse `nextInt()` with `nextLine()`: they handle end
-        of line differently.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -400,14 +498,13 @@ topics:
         - foundations
         - java
   - title: Operators and expressions
-    description: recognize basic Java constructs in code. explain how the value
-      changes at runtime.
+    description: "After this topic, learners can evaluate Java expressions with correct precedence and short-circuiting."
     order: 4
-    exerciseFocus: "one main topic operation; simple input or fixed example, no
-      unexplored libraries"
+    exerciseFocus: "Write a short program demonstrating “evaluate Java expressions with correct precedence and short-circuiting”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Operators and expressions
       content: >-
+
         ### Intuitive explanation
 
         You count every day, without even noticing: how much is left, whether
@@ -456,25 +553,44 @@ topics:
 
         ```java
 
+
         public class Main {
+
             public static void main(String[] args) {
+
                 int a = 10;
+
                 int b = 3;
 
-                System.out.println(a + b);      // додавання
-                System.out.println(a - b);      // віднімання
-                System.out.println(a * b);      // множення
-                System.out.println(a / b);      // ЦІЛЕ ділення
-                System.out.println(a % b);      // залишок
-                System.out.println(a == b);     // чи рівні?
-                System.out.println(a > b);      // чи більше?
-                System.out.println(2 + 3 * 4);  // пріоритет операцій
+
+                System.out.println(a + b);      // addition
+
+                System.out.println(a - b);      // subtraction
+
+                System.out.println(a * b);      // multiplication
+
+                System.out.println(a / b);      // integer division
+
+                System.out.println(a % b);      // remainder
+
+                System.out.println(a == b);     // are they equal?
+
+                System.out.println(a > b);      // is greater?
+
+                System.out.println(2 + 3 * 4);  // operator precedence
+
             }
+
         }
 
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         13
 
@@ -495,51 +611,69 @@ topics:
         ```
 
 
+
         ### Explanation of each line of the example
+
 
         - `a + b`, `a - b`, `a * b` - ordinary arithmetic: `13`, `7`, `30`.
 
+
         - `a / b` → `3`, not `3.33`: both operands are integers, so the fraction
+
         is discarded.
+
 
         - `a % b` → `1`: a unit remains after `10 = 3·3 + 1`.
 
+
         - `a == b` → `false`: `10` is not equal to `3`. Attention: there are
+
         **two** equal signs.
+
 
         - `a > b` → `true`: `10` is indeed greater than `3`.
 
+
         - `2 + 3 * 4` → `14`: multiplication was performed earlier than
+
         addition.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Confuse `=` and `==`.** A single `=` sets a value, a double `==`
+
         compares. `if (x = 5)` is a common error.
 
+
         2. **Expect fraction from integer division.** `10 / 3` is `3`, not
+
         `3.33`.
+
 
         3. **Ignore priority.** `2 + 3 * 4` is `14`; in doubt - put parentheses.
 
+
         4. **Confuse families of results.** The comparison returns
+
         `true`/`false`, not a number.
 
+
         5. **Forget about `%` for parity.** `n % 2 == 0` is a classic "even?"
+
         check.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"java","question":"What will
-        System.out.println(10 + 20 / 2 * 3);
-        print?","options":["45","40","20","55"],"answer":1,"explanation":"/ and
-        * are stronger than +, and they are counted from left to right: first 20
-        / 2 = 10, then 10 * 3 = 30. And at the end 10 + 30 = 40."}
+        {"type":"prediction","lang":"java","question":"What will System.out.println(10 + 20 / 2 * 3); print?","options":["45","40","20","55"],"answer":1,"explanation":"/ and * are stronger than +, and they are counted from left to right: first 20 / 2 = 10, then 10 * 3 = 30. And at the end 10 + 30 = 40."}
 
         ```
+
 
 
         ### In practice
@@ -548,37 +682,56 @@ topics:
 
         ```java
 
+
         int total = 2 + 3 * 4;
+
 
         System.out.println(total);
 
-        ```**Why it's here:** The multiplication operator is performed before
+
+        ```
+
+        **Why it's here:** The multiplication operator is performed before
+
         addition.
+
 
         **Note:** Use parentheses for a complex expression.
 
+
+        **Coding task.** Implement a short program or code snippet that demonstrates: evaluate Java expressions with correct precedence and short-circuiting.
+
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
 
+
         You have analyzed two families of operators: arithmetic ones give a
+
         number, comparative ones - `true`/`false`. We have seen that the
+
         expression is always collapsed to one value and is calculated according
+
         to priorities (`*`, `/`, `%` before `+`, `-`), and parentheses allow
+
         this order to be rewritten. And once again fixed: `=` puts, `==`
+
         compares. These "yes/no"-results are exactly the fuel on which `if' and
+
         `switch' will go further.
       level: 1
       tags:
         - foundations
         - java
   - title: "Flow control: if/else; switch"
-    description: decompose the algorithm into successive checks or steps. explain
-      why this particular branch or iteration is being executed.
+    description: "After this topic, learners can choose if/else or switch and define a branch for each valid value."
     order: 5
-    exerciseFocus: "one selection/repeat logic; be sure to add the empty, minimal,
-      and limiting case"
+    exerciseFocus: "Write a short program demonstrating “choose if/else or switch and define a branch for each valid value”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "Flow control: if/else; switch"
       content: >-
+
         ### Intuitive explanation
 
         Until now, your code has been like a train rolling down a single track:
@@ -613,68 +766,113 @@ topics:
 
         ```java
 
+
         public class Main {
+
             public static void main(String[] args) {
+
                 int age = 16;
 
+
                 if (age >= 18) {
-                    System.out.println("Можна голосувати");
+
+                    System.out.println("Eligible to vote");
+
                 } else {
-                    System.out.println("Ще рано голосувати");
+
+                    System.out.println("Not eligible to vote yet");
+
                 }
+
 
                 int day = 2;
+
                 switch (day) {
+
                     case 1:
-                        System.out.println("Понеділок");
+
+                        System.out.println("Monday");
+
                         break;
+
                     case 2:
-                        System.out.println("Вівторок");
+
+                        System.out.println("Tuesday");
+
                         break;
+
                     default:
-                        System.out.println("Інший день");
+
+                        System.out.println("Another day");
+
                 }
+
             }
+
         }
 
-        ```Output:
 
         ```
 
-        Ще рано голосувати
+        **Output:**
 
-        Вівторок
 
         ```
+
+
+        Not eligible to vote yet
+
+        Tuesday
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `if (age >= 18)` - the condition is false (`16 >= 18` is `false`), so
+
         the first block is skipped.
+
 
         - `else' — it works: it prints "It's still too early to vote."
 
+
         - `switch (day)` — `day` is `2`, so control jumps to `case 2`.
 
+
         - `case 2:` prints "Tuesday", and `break;` exits `switch` immediately,
+
         preventing it from falling into `default`.
 
+
         - `default:` is a backup option; did not work here, because a match was
+
         found earlier.
 
+
         The same `switch` is shorter in modern notation and without `break` (the
+
         arrow isolates the branches, so it is impossible to fail):
+
 
         ```java
 
+
         switch (day) {
-            case 1 -> System.out.println("Понеділок");
-            case 2 -> System.out.println("Вівторок");
-            default -> System.out.println("Інший день");
+
+            case 1 -> System.out.println("Monday");
+
+            case 2 -> System.out.println("Tuesday");
+
+            default -> System.out.println("Another day");
+
         }
 
+
         ```
+
 
 
         ### Typical mistakes of a beginner
@@ -698,15 +896,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"java","question":"level = 1. What will
-        switch print WITHOUT any break?\ncase 1: print(\"one\"); case 2:
-        print(\"two\"); default: print(\"other\");","options":["only
-        \"one\"","\"one\", \"two\", \"other\"","\"one\" and
-        \"two\"","nothing"],"answer":1,"explanation":"The match occurred in case
-        1, but without break the execution \"fails\" further and executes all
-        the following branches in a row: one, two, another. That is why break is
-        critically important in classic switch."}
+        {"type":"prediction","lang":"java","question":"level = 1. What will switch print WITHOUT any break?\ncase 1: print(\"one\"); case 2: print(\"two\"); default: print(\"other\");","options":["only \"one\"","\"one\", \"two\", \"other\"","\"one\" and \"two\"","nothing"],"answer":1,"explanation":"The match occurred in case 1, but without break the execution \"fails\" further and executes all the following branches in a row: one, two, another. That is why break is critically important in classic switch."}
 
         ```
 
@@ -717,39 +907,61 @@ topics:
 
         ```java
 
+
         if (score >= 60) {
-            result = "зараховано";
+
+            result = "passed";
+
         } else {
-            result = "ще раз";
+
+            result = "again";
+
         }
 
-        ```**Why it's here:** Only one of the two branches is executed.
+
+        ```
+
+        **Why it's here:** Only one of the two branches is executed.
+
 
         **Note:** Parentheses make branch boundaries unambiguous.
 
+
+        **Coding task.** Implement a short program or code snippet that demonstrates: choose if/else or switch and define a branch for each valid value.
+
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
 
+
         So, branching turns linear code into one that knows how to choose.
+
         `if/else' is a simple fork, where exactly one branch is triggered;
+
         `switch' is a convenient selection of options for one value. The main
+
         trap of the classic switch is the forgotten break and falling down; the
+
         modern entry `case X ->` removes it completely. These decisions are fed
+
         by `true`/`false` from the previous topic - and next we will teach the
+
         program to **repeat** actions using loops.
       level: 1
       tags:
         - control
         - java
   - title: "Loops: for; while; do-while"
-    description: decompose the algorithm into successive checks or steps. explain
-      why this particular branch or iteration is being executed.
+    description: "After this topic, learners can set a loop condition for the exact number of iterations."
     order: 6
-    exerciseFocus: "one selection/repeat logic; be sure to add the empty, minimal,
-      and limiting case"
+    exerciseFocus: "Write a short program demonstrating “set a loop condition for the exact number of iterations”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "Loops: for; while; do-while"
       content: |
+
         ### Intuitive explanation
+
         A loop is needed when one action needs to be repeated many times: output numbers from 1 to 100, process each element of the list, repeat the request until the user enters the correct data. Without a loop, you would have to copy the same command dozens of times.
 
         There are three basic loops in Java:
@@ -758,6 +970,7 @@ topics:
         - **`do-while'** is like `while', but checks the condition **after** the body, so it is executed **at least once**.
 
         ### What happens at runtime
+
         `while` first checks the condition; if true — executes the body and returns to check. As soon as the condition becomes false, the loop ends. For the loop to ever stop, there must be an action in the body that **brings the condition closer to false** (usually a counter change).
 
         `for (begin; condition; step)' is the same as `while', only its three parts are combined: `begin' is executed once, `condition' is checked before each pass, `step' is checked after each. `do-while` differs only in that the first check occurs after the first execution of the body.
@@ -765,6 +978,7 @@ topics:
         Inside any cycle there are two "controls" of the course. `break` immediately **leaves** the loop entirely — ideal when you've found what you need and there's no point in looking any further (for example, you've found the element you're looking for). `continue` **skips the rest of the body** and immediately moves on to the next pass - handy for "skipping over" unnecessary values ​​without putting the entire body in an `if`. Both save both code and extra spins.And when you just need to go through **all elements** of an array or collection, without bothering with the counter, there is also **`for-each'**: `for (String s : list) { ... }` is read as "for each `s` from the list". It is shorter and safer - there is no index, and therefore there is no way to "go beyond the limits". Choose a loop for the task: `for' — when the pass number is important, `for-each' — when the elements themselves are important, `while' — when the number of repetitions is unknown in advance.
 
         ### Minimal code example
+
         ```java
         public class Main {
             public static void main(String[] args) {
@@ -785,8 +999,11 @@ topics:
                 } while (k <= 3);
             }
         }
-        ```Output:
         ```
+
+        **Output:**
+        ```
+
         While: 1
         While: 2
         While: 3
@@ -799,6 +1016,7 @@ topics:
         ```
 
         ### Explanation of each line of the example
+
         - `int i = 1;` is a counter for `while`.
         - `while (i <= 3)' is a condition; body iterates until `i` exceeds 3.
         - `i = i + 1;` is a step; without it the cycle would be endless.
@@ -806,46 +1024,51 @@ topics:
         - `do { ... } while (k <= 3);` — the body will be executed at least once, even if the condition was false immediately.
 
         ### Typical mistakes of a beginner
+
         1. **Infinite loop.** If the counter does not change, the condition is always true - the program hangs.
         2. **Boundary error (`<=` instead of `<`).** Due to this, the loop makes one pass more or less than it should.
         3. **Incorrect start of the counter.** For the array indices, start from 0, for the "human" count - from 1.
         4. **Changing the counter in both the step and the body.** It is easy to accidentally "jump" the value.
-        5. **Confuse `do-while` with `while`.** `do-while` always does at least one pass, which is not always what is needed.{"type":"trace","lang":"java","caption":"Passes of the while loop","code":["int i = 1;","while (i <= 3) {"," System.out.println(\"While: \" + i);"," i = i + 1;","}"],"steps":[{"line":1,"vars":{"i":"1"},"note":"start"},{"line":2,"vars":{"i":"1"},"note":"1 <= 3 true → enter"},{"line":3,"vars":{"i":"1"},"out":"While: 1"},{"line":4,"vars":{"i":"2"},"note":"step: i increased"},{"line":2,"vars":{"i":"2"},"note":"2 <= 3 true"},{"line":3,"vars":{"i":"2"},"out":"While: 2"},{"line":4,"vars":{"i":"3"}},{"line":2,"vars":{"i":"3"},"note":"3 <= 3 true"},{"line":3,"vars":{"i":"3"},"out":"While: 3"},{"line":4,"vars":{"i":"4"}},{"line":2,"vars":{"i":"4"},"note":"4 <= 3 false → loop exit"}]}
+        5. **Confuse `do-while` with `while`.** `do-while` always does at least one pass, which is not always what is needed.
+
+        ```interactive
+
+        {"type":"trace","lang":"java","caption":"Passes of the while loop","code":["int i = 1;","while (i <= 3) {"," System.out.println(\"While: \" + i);"," i = i + 1;","}"],"steps":[{"line":1,"vars":{"i":"1"},"note":"start"},{"line":2,"vars":{"i":"1"},"note":"1 <= 3 true → enter"},{"line":3,"vars":{"i":"1"},"out":"While: 1"},{"line":4,"vars":{"i":"2"},"note":"step: i increased"},{"line":2,"vars":{"i":"2"},"note":"2 <= 3 true"},{"line":3,"vars":{"i":"2"},"out":"While: 2"},{"line":4,"vars":{"i":"3"}},{"line":2,"vars":{"i":"3"},"note":"3 <= 3 true"},{"line":3,"vars":{"i":"3"},"out":"While: 3"},{"line":4,"vars":{"i":"4"}},{"line":2,"vars":{"i":"4"},"note":"4 <= 3 false → loop exit"}]}
+
         ```
 
         ### In practice
 
-        A small fragment to understand the idea of the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: set a loop condition for the exact number of iterations.
 
-        ```java
-        for (int number = 0; number < 3; number++) {
-            System.out.println(number);
-        }
-        ```**Why it's here:** A loop has a start, a continuation condition, and a step.
-
-        **Note:** An error in the condition can create a skipped iteration or an infinite loop.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
+
         You learned how to repeat actions with three loops: `while' (while the condition is true), `for' (a given number of times), and `do-while' (at least once). The key to any loop is that the condition eventually becomes false, otherwise it will not terminate. By seeing on the trace how the counter changes and when the exit occurs, you will be able to accurately predict the number of passes.
+
         ### Interactive self-check
+
         First make a prediction in words, then check it with the answer. If you make a mistake, go back to the example and find the line that changes the result.
+
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"What is the main idea of ​​the topic \"Loops: for; while; do-while\"?","options":["The execution conforms to the described contract of the theme","The program always ignores this construct","The result depends only on the variable name"],"answer":0,"explanation":"The correct prediction relies on the input, the operation, and the result described in the topic."}
+        {"type":"prediction","lang":"java","question":"What does a `do-while` loop guarantee?","options":["The body runs at least once","The body is skipped when the condition starts false","The loop always runs exactly twice"],"answer":0,"explanation":"A do-while checks its condition after the body, so the first pass always happens even if the condition is initially false."}
+
         ```
+
       level: 1
       tags:
         - control
         - java
   - title: Arrays and working with them
-    description: choose the data structure according to the required operations.
-      explain the order, uniqueness, and method of accessing elements.
+    description: "After this topic, learners can declare and traverse an array without reading beyond its length."
     order: 7
-    exerciseFocus: "one operation on the structure; check for duplicates, missing
-      key or empty collection separately"
+    exerciseFocus: "Write a short program demonstrating “declare and traverse an array without reading beyond its length”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Arrays and working with them
       content: >
+
         ### Intuitive explanation
 
         An array is a box with many numbered compartments, each containing a
@@ -891,93 +1114,111 @@ topics:
 
         ```java
 
+
         public class Main {
+
             public static void main(String[] args) {
+
                 int[] nums = {10, 20, 30};
+
                 int sum = 0;
+
                 for (int i = 0; i < nums.length; i++) {
+
                     sum += nums[i];
+
                 }
-                System.out.println("Сума: " + sum);
-                System.out.println("Кількість: " + nums.length);
+
+                System.out.println("Sum: " + sum);
+
+                System.out.println("Count: " + nums.length);
+
             }
+
         }
 
-        ```Output:
 
         ```
 
-        Сума: 60
+        **Output:**
 
-        Кількість: 3
 
         ```
+
+
+        Sum: 60
+
+        Count: 3
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `int[] nums = {10, 20, 30};` — we create an array immediately with
+
         values (size 3 is determined automatically).
+
 
         - `int sum = 0;` is a sum accumulator.
 
+
         - `for (int i = 0; i < nums.length; i++)` — we pass indices 0, 1, 2
+
         (`length` = 3, so `i` does not reach 3).
+
 
         - `sum += nums[i];` — we add the value of the current cell to the sum.
 
+
         - `nums.length' — the number of elements; for arrays, it's a **field**,
+
         not a method.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Start indexing from 1.** The first element is `nums[0]`, the last
+
         element is `nums[nums.length - 1]`.
 
+
         2. **Go out of bounds of the array.** Calling `nums[3]` in an array of 3
+
         elements will throw an `ArrayIndexOutOfBoundsException`.
 
+
         3. **Confuse `length` and `length()`.** Arrays have the `length` field
+
         (without brackets), and `String` has the `length()` method.
 
+
         4. **Forget that the size is fixed.** It is not possible to "add" an
+
         element to an array - you need either a larger array or `ArrayList'.
 
+
         5. **Cycle condition `i <= nums.length`.** Because of `<=`, the loop
+
         will go past the last index and
-        crash.{"type":"trace","lang":"java","caption":"Trace the array and
-        accumulate the sum","code":["int[] nums = {10, 20, 30};","int sum =
-        0;","for (int i = 0; i < nums.length; i++) {"," sum +=
-        nums[i];","}","System.out.println(\"Sum: \" +
-        sum);"],"steps":[{"line":1,"vars":{"nums":"[10, 20,
-        30]"},"note":"created an array of 3
-        elements"},{"line":2,"vars":{"sum":"0"},"note":"sum so far
-        0"},{"line":3,"vars":{"i":"0"},"note":"0 < 3 → enter
-        cycle"},{"line":4,"vars":{"i":"0","sum":"10"},"note":"sum += nums[0]
-        (10)"},{"line":3,"vars":{"i":"1"},"note":"1 < 3 →
-        continue"},{"line":4,"vars":{"i":"1","sum":"30"},"note":"sum += nums[1]
-        (20)"},{"line":3,"vars":{"i":"2"},"note":"2 < 3 →
-        continue"},{"line":4,"vars":{"i":"2","sum":"60"},"note":"sum += nums[2]
-        (30)"},{"line":3,"vars":{"i":"3"},"note":"3 < 3 false → exit
-        cycle"},{"line":6,"vars":{"sum":"60"},"out":"Sum: 60","note":"print the
-        result"}]}
+
+        crash.
+
+        ```interactive
+
+        {"type":"trace","lang":"java","caption":"Trace the array and accumulate the sum","code":["int[] nums = {10, 20, 30};","int sum = 0;","for (int i = 0; i < nums.length; i++) {"," sum += nums[i];","}","System.out.println(\"Sum: \" + sum);"],"steps":[{"line":1,"vars":{"nums":"[10, 20, 30]"},"note":"created an array of 3 elements"},{"line":2,"vars":{"sum":"0"},"note":"sum so far 0"},{"line":3,"vars":{"i":"0"},"note":"0 < 3 → enter cycle"},{"line":4,"vars":{"i":"0","sum":"10"},"note":"sum += nums[0] (10)"},{"line":3,"vars":{"i":"1"},"note":"1 < 3 → continue"},{"line":4,"vars":{"i":"1","sum":"30"},"note":"sum += nums[1] (20)"},{"line":3,"vars":{"i":"2"},"note":"2 < 3 → continue"},{"line":4,"vars":{"i":"2","sum":"60"},"note":"sum += nums[2] (30)"},{"line":3,"vars":{"i":"3"},"note":"3 < 3 false → exit cycle"},{"line":6,"vars":{"sum":"60"},"out":"Sum: 60","note":"print the result"}]}
 
         ```
 
+
         ### In practice
 
-        A small fragment to understand the idea of the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: declare and traverse an array without reading beyond its length.
 
-        ```java
-
-        int[] numbers = {2, 4, 6};
-
-        System.out.println(numbers[0]);
-
-        ```**Why it's here:** The array has a fixed size and indices start at
-        `0`.
-
-        **Note:** The last index is `length - 1`.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -995,15 +1236,10 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"What is the main idea
-        of ​​the topic \"Arrays and working with them\"?","options":["The
-        execution conforms to the described contract of the theme","The program
-        always ignores this construct","The result depends only on the variable
-        name"],"answer":0,"explanation":"The correct prediction relies on the
-        input, the operation, and the result described in the topic."}
+        {"type":"prediction","lang":"java","question":"For `int[] nums = {10, 20, 30};`, what does `nums[2]` return?","options":["30","20","IndexOutOfBoundsException"],"answer":0,"explanation":"Array indexes start at 0, so nums[0] is 10, nums[1] is 20, and nums[2] is 30. For an array of three elements, the last valid index is length - 1, which is 2."}
 
         ```
+
       level: 1
       tags:
         - collections
@@ -1017,6 +1253,7 @@ topics:
     theory:
       title: Methods; parameters; overload
       content: >
+
         ### Intuitive explanation
 
         Imagine that you are writing a program and notice that the same dozen
@@ -1063,21 +1300,36 @@ topics:
 
         ```java
 
+
         public class Main {
-            static int square(int n) { return n * n; }          // версія для цілих
-            static double square(double n) { return n * n; }     // перевантаження для дробових
+
+            static int square(int n) { return n * n; }          // integer overload
+
+            static double square(double n) { return n * n; }     // floating-point overload
+
 
             public static void main(String[] args) {
+
                 int a = square(5);
+
                 double b = square(2.5);
+
                 System.out.println(a);   // 25
+
                 System.out.println(b);   // 6.25
+
             }
+
         }
 
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         25
 
@@ -1086,52 +1338,72 @@ topics:
         ```
 
 
+
         ### Explanation of each line of the example
 
+
         - `static int square(int n)' — version for integers; returns `n * n` of
+
         type `int`.
 
+
         - `static double square(double n)` — **overload**: Same name but
+
         `double` parameter.
 
+
         - `square(5)` — the argument is whole → the compiler takes the first
+
         version → `25`.
 
+
         - `square(2.5)` — fractional argument → takes the second version →
+
         `6.25`.
 
+
         - methods differ only in the **parameter type**, and this is enough for
+
         Java to distinguish between them.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Duplicate the code instead of the method.** If the same lines occur
+
         twice, this is already a reason to move them to the method.
 
+
         2. **Confuse parameters and result.** Parameters go inside (input),
+
         `return' - outside (output); these are different directions.
 
+
         3. **Forget ``return'' in a method that should return a value.** Such a
+
         method does not compile.
 
+
         4. **"Overload" by changing only the result type.** The difference
+
         should be in the **parameters**; only another type of result does not
+
         count.
 
+
         5. **Confuse the order of arguments.** `move(x, y)` and `move(y, x)` -
+
         Java will replace the values ​​as they are, not as you
-        thought.{"type":"trace","lang":"java","caption":"Which of the overloaded
-        square will be chosen","code":["int square(int n) { return n * n;
-        }","double square(double n) { return n * n; }","int a =
-        square(5);","double b =
-        square(2.5);"],"steps":[{"line":3,"vars":{},"note":"argument 5 — int →
-        choose version square(int)"},{"line":1,"vars":{"n":"5"},"note":"5 *
-        5"},{"line":3,"vars":{"a":"25"},"note":"returns
-        25"},{"line":4,"vars":{},"note":"argument 2.5 — double → version
-        square(double)"},{"line":2,"vars":{"a":"25"},"note":"2.5 *
-        2.5"},{"line":4,"vars":{"b":"6.25"},"note":"returns 6.25"}]}
+
+        thought.
+
+        ```interactive
+
+        {"type":"trace","lang":"java","caption":"Which of the overloaded square will be chosen","code":["int square(int n) { return n * n; }","double square(double n) { return n * n; }","int a = square(5);","double b = square(2.5);"],"steps":[{"line":3,"vars":{},"note":"argument 5 — int → choose version square(int)"},{"line":1,"vars":{"n":"5"},"note":"5 * 5"},{"line":3,"vars":{"a":"25"},"note":"returns 25"},{"line":4,"vars":{},"note":"argument 2.5 — double → version square(double)"},{"line":2,"vars":{"a":"25"},"note":"2.5 * 2.5"},{"line":4,"vars":{"b":"6.25"},"note":"returns 6.25"}]}
 
         ```
+
 
         ### In practice
 
@@ -1139,55 +1411,75 @@ topics:
 
         ```java
 
+
         static int doubleValue(int value) {
+
             return value * 2;
+
         }
 
-        ```**Why it's here:** A method describes a result type, a parameter, and
+
+        ```
+
+        **Why it's here:** A method describes a result type, a parameter, and
+
         an action. `return` passes the value back.
+
 
         **Note:** A method's signature is part of its contract.
 
+
+        **Coding task.** Implement a short program or code snippet that demonstrates: one script with a clear value stream; not to require individual unit tests instead of a complete program.
+
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
 
+
         So, a method is a named block of commands that removes duplication and
+
         makes the code readable: called by name, passed parameters, received
+
         `return`. And overloading allows you to give the same name to several
+
         variants of the action — and the compiler itself will choose the right
+
         one based on the types of arguments even before starting. Next, we will
+
         see a special case of a method that calls itself - recursion.
+
 
         ### Interactive self-check
 
+
         First make a prediction in words, then check it with the answer. If you
+
         make a mistake, go back to the example and find the line that changes
+
         the result.
+
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"What is the main idea
-        of ​​the topic \"Methods; parameters; overload\"?","options":["The
-        execution conforms to the described contract of the theme","The program
-        always ignores this construct","The result depends only on the variable
-        name"],"answer":0,"explanation":"The correct prediction relies on the
-        input, the operation, and the result described in the topic."}
+        {"type":"prediction","lang":"java","question":"How does Java distinguish overloaded methods with the same name?","options":["By the number, types, and order of parameters","By the return type alone","By the comment above the method"],"answer":0,"explanation":"An overload is distinguished by its parameter list. Changing only the return type is not enough."}
 
         ```
+
       level: 2
       tags:
         - abstraction
         - java
   - title: Recursion
-    description: decompose the algorithm into successive checks or steps. explain
-      why this particular branch or iteration is being executed.
+    description: "After this topic, learners can define a recursive base case and reliably reduce the problem."
     order: 9
-    exerciseFocus: "one selection/repeat logic; be sure to add the empty, minimal,
-      and limiting case"
+    exerciseFocus: "Write a short program demonstrating “define a recursive base case and reliably reduce the problem”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Recursion
       content: |
+
         ### Intuitive explanation
+
         **Recursion** is when a method in its body calls itself. The idea is simple: reduce a big problem to **the same, but smaller**, until it becomes so simple that the answer is obvious.
 
         The classic analogy is a matryoshka doll: to get to the smallest doll, you open one, inside - the same task with a smaller doll, and so on to the smallest, which can no longer be opened. This "smallest doll" is the **recursion base** (stopping condition). Challenges will never end without her.
@@ -1195,6 +1487,7 @@ topics:
         Each recursion has two parts: **base** (when to stop and return a ready answer) and **step** (how to reduce the problem to a smaller one and call itself).
 
         ### What happens at runtime
+
         Each method call gets its own section in the **call stack** with its parameters. Calls are "stringed" on top of each other until the base is activated. Then they start **returning in reverse order** and each completes their part of the answer from what the deeper challenge returned.
 
         For `factorial(4)`, first there is a "descent" 4 → 3 → 2 → 1, and then the "ascent" is a multiplication on the return path: 1 → 2 → 6 → 24. Each level waits until the deeper one returns, so the intermediate results are "remembered" by the call stack itself.
@@ -1208,14 +1501,17 @@ topics:
             }
             return result;                 // factorialLoop(4) → 24
         }
-        ```The **price** difference is that the loop uses one variable and doesn't grow in memory, while the recursion creates one frame per call. Therefore, for very large `n`, recursion may overflow the stack (`StackOverflowError`), while the loop may not. Recursion is chosen when it makes the code **noticeably clearer** (trees, nested structures, divide and conquer), not for recursion's sake.
+        ```
+
+        The **price** difference is that the loop uses one variable and doesn't grow in memory, while the recursion creates one frame per call. Therefore, for very large `n`, recursion may overflow the stack (`StackOverflowError`), while the loop may not. Recursion is chosen when it makes the code **noticeably clearer** (trees, nested structures, divide and conquer), not for recursion's sake.
 
         ### Minimal code example
+
         ```java
         public class Main {
             static int factorial(int n) {
-                if (n <= 1) return 1;            // база рекурсії
-                return n * factorial(n - 1);     // крок: зводимо до меншої задачі
+                if (n <= 1) return 1;            // recursion base case
+                return n * factorial(n - 1);     // step: reduce to a smaller problem
             }
 
             public static void main(String[] args) {
@@ -1225,51 +1521,57 @@ topics:
         ```
 
         ### Explanation of each line of the example
+
         - `static int factorial(int n)' — the method returns the factorial of the number `n'.
         - `if (n <= 1) return 1;` — **base**: the factorial of 0 and 1 is equal to 1, we will not go deeper.
         - `return n * factorial(n - 1);` — **step**: the result is `n' multiplied by the factorial of the smaller number.
         - `factorial(4)` — starts the chain: 4·3·2·1 = 24.
 
         ### Typical mistakes of a beginner
+
         1. **No base.** No stopping condition - endless calls and `StackOverflowError`.
         2. **The base is unreachable.** For example, calling `factorial(n)` instead of `factorial(n - 1)` does not decrement the number.
         3. **Forget to return the result of the step.** Before `n * factorial(n - 1)`, `return` is required, otherwise the answer will be lost.
-        4. **Recursion too deep.** Very large `n` will overflow the stack; sometimes a normal cycle is better.{"type":"trace","lang":"java","caption":"Call stack factorial(4)","code":["int factorial(int n) {"," if (n <= 1) return 1;"," return n * factorial(n - 1);","}","factorial(4)"],"steps":[{"line":5,"vars":{"n":"4"},"note":"we call factorial(4)"},{"line":2,"vars":{"n":"4"},"note":"4 <= 1? no"},{"line":3,"vars":{"n":"4"},"note":"need 4 * factorial(3)"},{"line":2,"vars":{"n":"3"},"note":"3 <= 1? no"},{"line":3,"vars":{"n":"3"},"note":"3 * factorial(2)"},"note":"2 <= 1? no"},{"line":3,"vars":{"n":"2"},"note":"2 * factorial(1)"},"note":"1 <= 1? yes → return 1"},{"line":3,"vars":{"n":"2"},"note":"ascent: 2 * 1 = 2"},{"line":3,"vars":{"n":"3"},"note":"3 * 2 = 6"},{"line":3,"vars":{"n":"4"},"note":"4 * 6 = 24"},{"line":5,"vars":{},"out":"24","note":"factorial(4) = 24"}]}
+        4. **Recursion too deep.** Very large `n` will overflow the stack; sometimes a normal cycle is better.
+
+        ```interactive
+
+        {"type":"trace","lang":"java","caption":"Call stack for factorial(4)","code":["int factorial(int n) {","    if (n <= 1) return 1;","    return n * factorial(n - 1);","}","factorial(4)"],"steps":[{"line":5,"vars":{},"note":"call factorial(4)"},{"line":2,"vars":{"n":"4"},"note":"4 <= 1 is false"},{"line":3,"vars":{"n":"4"},"note":"need 4 * factorial(3)"},{"line":2,"vars":{"n":"3"},"note":"3 <= 1 is false"},{"line":3,"vars":{"n":"3"},"note":"need 3 * factorial(2)"},{"line":2,"vars":{"n":"2"},"note":"2 <= 1 is false"},{"line":3,"vars":{"n":"2"},"note":"need 2 * factorial(1)"},{"line":2,"vars":{"n":"1"},"note":"1 <= 1 is true; return 1"},{"line":3,"vars":{"n":"2"},"note":"return 2 * 1 = 2"},{"line":3,"vars":{"n":"3"},"note":"return 3 * 2 = 6"},{"line":3,"vars":{"n":"4"},"note":"return 4 * 6 = 24"},{"line":5,"vars":{},"out":"24","note":"factorial(4) returns 24"}]}
+
         ```
 
         ### In practice
 
-        A small fragment to understand the idea of the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: define a recursive base case and reliably reduce the problem.
 
-        ```java
-        for (int number = 0; number < 3; number++) {
-            System.out.println(number);
-        }
-        ```**Why it's here:** A loop has a start, a continuation condition, and a step.
-
-        **Note:** An error in the condition can create a skipped iteration or an infinite loop.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
+
         You learned that a recursion solves a problem through a reduced version of itself and that any recursion consists of a **base** (a stopping condition) and a **step**. You saw on the call stack how the calls first "go down" to the base and then "come back" completing the response. Recursion lends itself naturally to trees, directory traversals, and divide-and-conquer problems.
+
         ### Interactive self-check
+
         First make a prediction in words, then check it with the answer. If you make a mistake, go back to the example and find the line that changes the result.
+
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"What is the main idea behind Recursion?","options":["The execution conforms to the described contract of the theme","The program always ignores this construct","The result depends only on the variable name"],"answer":0,"explanation":"The correct prediction relies on the input, the operation, and the result described in the topic."}
+        {"type":"prediction","lang":"java","question":"Which condition stops the recursive calls in `factorial(4)`?","options":["`n <= 1`","`n < 0`","`n == 4`"],"answer":0,"explanation":"The base case n <= 1 returns 1 without another recursive call. Each earlier step multiplies n by the result of the smaller problem."}
+
         ```
+
       level: 2
       tags:
         - control
         - java
   - title: Classes and objects
-    description: describe the responsibility of the type or object in simple terms.
-      distinguish composition, imitation and polymorphic behavior.
+    description: "After this topic, learners can create a class with invariants and methods that manage its state."
     order: 10
-    exerciseFocus: "one object interaction or behavior choice; do not add frameworks
-      and unnecessary boilerplate"
+    exerciseFocus: "Write a short program demonstrating “create a class with invariants and methods that manage its state”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Classes and objects
       content: >-
+
         ### Intuitive explanation
 
         **Class** is a description, "drawing" of a certain type of thing: what
@@ -1317,29 +1619,52 @@ topics:
 
         ```java
 
+
         public class Main {
+
             static class Point {
+
                 int x;
+
                 int y;
-                Point(int x, int y) {    // конструктор задає початкові поля
+
+                Point(int x, int y) {    // the constructor sets the initial fields
+
                     this.x = x;
+
                     this.y = y;
+
                 }
-                int distanceSquared() {  // метод працює з полями свого об'єкта
+
+                int distanceSquared() {  // the method works with its object's fields
+
                     return x * x + y * y;
+
                 }
+
             }
+
 
             public static void main(String[] args) {
+
                 Point p = new Point(3, 4);
+
                 System.out.println(p.x + ", " + p.y);
+
                 System.out.println(p.distanceSquared());
+
             }
+
         }
 
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         3, 4
 
@@ -1348,73 +1673,79 @@ topics:
         ```
 
 
+
         ### Explanation of each line of the example
+
 
         - `class Point { int x; int y; ... }` is a class with two data fields.
 
+
         - `Point(int x, int y)` — **constructor**; `this.x = x` distinguishes an
+
         object field from a parameter with the same name.
 
+
         - `int distanceSquared()` is a method that calculates `x*x + y*y` for
+
         the fields of its object.
 
+
         - `Point p = new Point(3, 4);` — we create an object; `p` holds a
+
         reference to it.
 
+
         - `p.x`, `p.distanceSquared()` — we access the field and method through
+
         the object.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Confuse a class and an object.** A class is a description, an
+
         object is a concrete instance of this description.
 
+
         2. **Refer to fields via class (`Point.x`).** Fields belong to the
+
         object, so only `p.x`.
 
+
         3. **Forget to initialize fields.** Without a constructor, numeric
+
         fields will be 0, reference fields will be `null'.
 
+
         4. **Confuse `this`.** In the constructor, `this.x` is an object field,
+
         `x` is a parameter; without `this` the assignment does nothing.
 
+
         5. **Print the object "as is".** `System.out.println(p)` without its own
+
         `toString` will output a technical `Point@1b6d…`, not coordinates; to
+
         see the content, the `toString` method is overridden.
+
 
         ### What lies in the memory
 
+
         ```interactive
 
-
-        {"type":"memory","caption":"Point p = new Point(3,
-        4);","stack":[{"name":"p","ref":"pt"}],"heap":[{"id":"pt","value":"Point
-        { x = 3, y = 4 }"}],"note":"The variable p in the stack stores only a
-        reference (arrow) to the Point object, which actually lies in the heap
-        with its x and y fields."}
+        {"type":"memory","caption":"Point p = new Point(3, 4);","stack":[{"name":"p","ref":"pt"}],"heap":[{"id":"pt","value":"Point { x = 3, y = 4 }"}],"note":"The variable p in the stack stores only a reference (arrow) to the Point object, which actually lies in the heap with its x and y fields."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: create a class with invariants and methods that manage its state.
 
-        ```java
-
-        class Lamp {
-            private boolean isOn;
-
-            Lamp(boolean isOn) {
-                this.isOn = isOn;
-            }
-        }
-
-        ```**Why it's here:** The field stores the state, the constructor sets
-        the initial value, and `private` protects it from being changed
-        directly.
-
-        **Note:** The public method must control the state change.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -1428,14 +1759,13 @@ topics:
         - objects
         - java
   - title: Encapsulation; getters/setters
-    description: describe the responsibility of the type or object in simple terms.
-      distinguish composition, imitation and polymorphic behavior.
+    description: "After this topic, learners can encapsulate class state and validate updates through its methods."
     order: 11
-    exerciseFocus: "one object interaction or behavior choice; do not add frameworks
-      and unnecessary boilerplate"
+    exerciseFocus: "Write a short program demonstrating “encapsulate class state and validate updates through its methods”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Encapsulation; getters/setters
       content: >-
+
         ### Intuitive explanation
 
         Imagine an ATM without a case: the wires are on the outside, you can
@@ -1477,100 +1807,125 @@ topics:
 
         ```java
 
+
         public class Main {
+
             static class Account {
-                private int balance = 0;              // ніхто ззовні не чіпає напряму
+
+                private int balance = 0;              // no direct external access
+
 
                 void deposit(int amount) {
-                    if (amount <= 0) return;          // захищаємо інваріант
+
+                    if (amount <= 0) return;          // preserve the invariant
+
                     balance += amount;
+
                 }
 
+
                 int getBalance() { return balance; }
+
             }
+
 
             public static void main(String[] args) {
+
                 Account acc = new Account();
+
                 acc.deposit(100);
-                acc.deposit(-50);                      // відхилено перевіркою
+
+                acc.deposit(-50);                      // rejected by validation
+
                 System.out.println(acc.getBalance());
+
             }
+
         }
 
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         100
 
-        ```The second attempt (`deposit(-50)`) was quietly rejected by the check
+        ```
+
+        The second attempt (`deposit(-50)`) was quietly rejected by the check
+
         — the balance remained correct.
+
 
         ### Explanation of each line of the example
 
+
         - `private int balance = 0;` — the field is closed: it cannot be changed
+
         directly from the outside.
+
 
         - `void deposit(int amount)' is the only way to replenish the account.
 
+
         - `if (amount <= 0) return;` — invariant guard: negative or zero
+
         replenishment will not pass.
 
+
         - `getBalance()` is a getter: allows to **read** the balance, but not to
+
         overwrite it arbitrarily.
 
+
         - in `main`, the `deposit(-50)` attempt did not spoil anything - the
+
         rule worked.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Leave the field `public`.** Then anyone writes `acc.balance =
+
         -1000` and the whole defense is useless (catch that below).
 
+
         2. **Make a setter without checking.** A "just assigning setter" is the
+
         same open field, just a longer way.
 
+
         3. **Confuse a getter and a setter.** A getter reads (`return'), a
+
         setter changes (accepts a value).
 
+
         4. **Sculpt a getter/setter to each field "just in case".** Open only
+
         what really needs to be available; let the rest stay inside.
+
 
         ### Find the error
 
+
         ```interactive
 
-
-        {"type":"spot-the-bug","lang":"java","question":"Why doesn't this class
-        protect its balance?","lines":["class Account {","    public int balance
-        = 0;","    public void deposit(int amount) {","        balance +=
-        amount;","    }","}"],"buggyLine":2,"explanation":"The balance field is
-        public, so anyone can directly make account.balance = -999 to bypass all
-        checks. The field must be private, and changes only through methods with
-        validation."}
+        {"type":"spot-the-bug","lang":"java","question":"Why doesn't this class protect its balance?","lines":["class Account {","    public int balance = 0;","    public void deposit(int amount) {","        balance += amount;","    }","}"],"buggyLine":2,"explanation":"The balance field is public, so anyone can directly make account.balance = -999 to bypass all checks. The field must be private, and changes only through methods with validation."}
 
         ```
+
 
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: encapsulate class state and validate updates through its methods.
 
-        ```java
-
-        class Lamp {
-            private boolean isOn;
-
-            Lamp(boolean isOn) {
-                this.isOn = isOn;
-            }
-        }
-
-        ```**Why it's here:** The field stores the state, the constructor sets
-        the initial value, and `private` protects it from being changed
-        directly.
-
-        **Note:** The public method must control the state change.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -1587,21 +1942,22 @@ topics:
         - objects
         - java
   - title: Static members and initialization
-    description: explain the main idea of ​​the topic in your own words. read a
-      short example and predict its outcome.
+    description: "After this topic, learners can distinguish instance state from shared static state and determine initialization order."
     order: 12
-    exerciseFocus: "one key idea of ​​Java with short deterministic stdout and
-      boundary case checking"
+    exerciseFocus: "Write a short program demonstrating “distinguish instance state from shared static state and determine initialization order”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Static members and initialization
       content: |-
+
         ### Intuitive explanation
+
         Usually, each object has its own data. But sometimes the value or action belongs to the **entire class** and not to a single object. For example, "how many objects have been created" is a property of the class in general. There are **static** members for this (`static' keyword).
 
         - A **static field** exists in a **single instance** for the entire class and is shared by all objects.
         - **Static method** can be called without creating an object — through the class name (like `Math.max(...)` or `Integer.parseInt(...)`).
 
         ### What happens at runtime
+
         A static field is created **once** when the class is first loaded, and lives in a separate "class" area of memory - not inside objects. Therefore, when any object changes a static field, everyone "sees" the change. Instead, a regular (non-static) field has **its own copy in each object**.
 
         In the example below, `total` is static (a shared counter), and `id` is regular (each has its own). Each new object increments the shared `total` and stores its current value in its own `id`.The second part of the topic name is **initialization**. Most often, `static` is combined with `final`, obtaining a **constant**: `static final double PI = 3.14159;` — one value for the entire class, which can no longer be changed. This is how `Math.PI` or `Integer.MAX_VALUE` are arranged. And when a static field needs to be calculated more complexly than with a single expression, there is a **static initialization block** `static { ... }` — it is executed exactly once when the class is loaded, before any object is created. Classes consisting *only* of static methods and constants (like `Math') are called **utility**: an object is not created from them, there is nothing to fill it with.
@@ -1609,11 +1965,12 @@ topics:
         There is also a caveat, and it is important. A shared mutable static field is essentially a **global variable**. It is easy to abuse, hiding hidden dependencies, and in multi-threaded code, a shared static counter becomes a source of data chases (several threads manage the same field at the same time). Therefore, static is made either truly classy (counters, constants, utilities), or nothing.
 
         ### Minimal code example
+
         ```java
         public class Main {
             static class Counter {
-                static int total = 0;   // одна спільна змінна на всі об'єкти
-                int id;                 // своє значення в кожного об'єкта
+                static int total = 0;   // one shared variable for all objects
+                int id;                 // each object has its own value
                 Counter() {
                     total++;
                     id = total;
@@ -1628,13 +1985,17 @@ topics:
                 System.out.println(Counter.total);
             }
         }
-        ```Output:
         ```
+
+        **Output:**
+        ```
+
         1 2 3
         3
         ```
 
         ### Explanation of each line of the example
+
         - `static int total = 0;` — **common** class field; one copy for all objects.
         - `int id;` — a **normal** field; each object has its own meaning.
         - `Counter() { total++; id = total; }` - the constructor increments the shared counter and fixes it in the `id` of this object.
@@ -1642,15 +2003,18 @@ topics:
         - `Counter.total` → `3`: Common field accessed via **classname**.
 
         ### Typical mistakes of a beginner
+
         1. **Confuse a static and an ordinary field.** Static is common to a class; ordinary — separate for each object.
         2. **Refer to a static field via an object (`a.total`).** Compiles but is confusing - `Counter.total` is correct.
         3. **Expect different values ​​of the static field in different objects.** It is the same for all.
         4. **Call regular fields from the `static` method.** The static method has no object (`this`), so it only sees the static.
 
         ### What lies in the memory
+
         ```interactive
 
         {"type":"memory","caption":"Three Counter objects and a common static field","stack":[{"name":"a","ref":"o1"},{"name":"b","ref":"o2"},{"name":"c","ref":"o3"}],"heap":[{"id":"cls","value":"static Counter.total = 3 (one copy per class)"},{"id":"o1","value":"Counter { id = 1 }"},{"id":"o2","value":"Counter { id = 2 }"},{"id":"o3","value":"Counter { id = 3 }"}],"note":"id — unique to each object; total is static, exists in a single instance and is shared by all objects."}
+
         ```
 
         ### In practice
@@ -1660,70 +2024,83 @@ topics:
         class Counter {
             static int total = 0;
         }
-        ```**Why it's here:** `static` binds the field to a class, not to an individual object: all instances see a shared value.
+        ```
+
+        **Why it's here:** `static` binds the field to a class, not to an individual object: all instances see a shared value.
 
         **Note:** Initialization of static state must be explicit and safe for startup order.
 
+        **Coding task.** Implement a short program or code snippet that demonstrates: distinguish instance state from shared static state and determine initialization order.
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
+
         You learned that `static' members belong to a **class**, not to individual objects: a static field exists in a single instance and is shared by all, and a static method is called by class name without creating an object. This is handy for counters, constants (`static final'), and helper methods, but it's important not to make static what actually belongs to a particular object.
       level: 2
       tags:
         - practice
         - java
-  - title: Imitation
-    description: describe the responsibility of the type or object in simple terms.
-      distinguish composition, imitation and polymorphic behavior.
+  - title: Inheritance
+    description: "After this topic, learners can extend a base class and safely invoke the superclass constructor."
     order: 13
-    exerciseFocus: "one object interaction or behavior choice; do not add frameworks
-      and unnecessary boilerplate"
+    exerciseFocus: "Write a short program demonstrating “extend a base class and safely invoke the superclass constructor”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
-      title: Imitation
+      title: Inheritance
       content: |
+
         ### Intuitive explanation
+
         **Inheritance** is a way to create a new class based on an existing one. Imagine an Animal class with generic properties; based on it, the "Dog" class **inherits** everything in common and adds its own (bark). So you don't duplicate the same code and build a logical hierarchy "general → partial".
 
         Imitation expresses the relation **"is a species"**: a dog is an animal. If there is no such connection (the table is not an animal), imitation is inappropriate.
 
         ### What happens at runtime
+
         The child class (`Dog`) gets all the fields and methods of the parent (`Animal`) and can add its own. But first you have to **construct the parent part** of the object: when you create a `Dog`, Java first executes the `Animal` constructor (via `super(...)`) and then the body of the `Dog` constructor. Therefore, `super(...)` must be the **first line** in the constructor.
 
         `super` also provides access to the parent method (`super.eat()`) if you want to complement its behavior rather than rewriting it from scratch.
 
         ### Minimal code example
+
         ```java
         public class Main {
             static class Animal {
                 String name;
                 Animal(String name) {
                     this.name = name;
-                    System.out.println("Animal створено");
+                    System.out.println("Animal created");
                 }
-                void eat() { System.out.println(name + " їсть"); }
+                void eat() { System.out.println(name + " eats"); }
             }
 
             static class Dog extends Animal {
                 Dog(String name) {
-                    super(name);                        // спершу конструктор батька
-                    System.out.println("Dog створено");
+                    super(name);                        // call the parent constructor first
+                    System.out.println("Dog created");
                 }
-                void bark() { System.out.println(name + " каже: Гав!"); }
+                void bark() { System.out.println(name + " says: Woof!"); }
             }
 
             public static void main(String[] args) {
-                Dog d = new Dog("Рекс");
-                d.eat();    // успадкований метод
-                d.bark();   // власний метод
+                Dog d = new Dog("Rex");
+                d.eat();    // inherited method
+                d.bark();   // own method
             }
         }
-        ```Output:
         ```
-        Animal створено
-        Dog створено
-        Рекс їсть
-        Рекс каже: Гав!
+
+        **Output:**
+        ```
+
+        Animal created
+        Dog created
+        Rex eats
+        Rex says: Woof!
         ```
 
         ### Explanation of each line of the example
+
         - `class Dog extends Animal' — `Dog' inherits the fields and methods of `Animal'.
         - `super(name);` — calls the constructor of the parent; must be **first** in the `Dog` constructor.
         - the output order "Animal created" → "Dog created" shows: the parent part is built first.
@@ -1731,51 +2108,53 @@ topics:
         - `d.bark()` is the **own** method of `Dog`, which is not present in `Animal`.
 
         ### Typical mistakes of a beginner
+
         1. **Imitate without logical connection.** Imitation is appropriate only for "is a variety."
         2. **Forget `extends`.** Without it, the class inherits nothing.
         3. **Forget `super(...)` when the parent has a constructor with parameters.** The code does not compile.
         4. **Put `super(...)` not on the first line.** Java requires that the parent constructor be called first.
-        5. **Thinking that the parent "knows" about the offspring.** The dependency is unidirectional: the offspring knows about the parent, not the other way around.{"type":"trace","lang":"java","caption":"Building order Dog(\"Rex\")","code":["Animal(String name) { this.name = name; print(\"Animal created\"); }","Dog(String name) { super(name); print(\"Dog created\"); }","Dog d = new Dog(\"Rex\");","d.eat();","d.bark();"],"steps":[{"line":3,"vars":{},"note":"we create new Dog(\"Rex\")"},{"line":2,"vars":{"name":"Rex"},"note":"Dog constructor: first super(name)"},{"line":1,"vars":{"name":"Rex"},"out":"Animal created","note":"parent constructor is executed FIRST"},{"line":2,"vars":{"name":"Rex"},"out":"Dog created","note":"then constructor body Dog"},{"line":4,"vars":{"name":"Rex"},"out":"Rex eats","note":"eat() is inherited from Animal"},{"line":5,"vars":{"name":"Rex"},"out":"Rex says Bark!","note":"bark() is Dog's own method"}]}
+        5. **Thinking that the parent "knows" about the offspring.** The dependency is unidirectional: the offspring knows about the parent, not the other way around.
+
+        ```interactive
+
+        {"type":"trace","lang":"java","caption":"Building order Dog(\"Rex\")","code":["Animal(String name) { this.name = name; print(\"Animal created\"); }","Dog(String name) { super(name); print(\"Dog created\"); }","Dog d = new Dog(\"Rex\");","d.eat();","d.bark();"],"steps":[{"line":3,"vars":{},"note":"we create new Dog(\"Rex\")"},{"line":2,"vars":{"name":"Rex"},"note":"Dog constructor: first super(name)"},{"line":1,"vars":{"name":"Rex"},"out":"Animal created","note":"parent constructor is executed FIRST"},{"line":2,"vars":{"name":"Rex"},"out":"Dog created","note":"then constructor body Dog"},{"line":4,"vars":{"name":"Rex"},"out":"Rex eats","note":"eat() is inherited from Animal"},{"line":5,"vars":{"name":"Rex"},"out":"Rex says Bark!","note":"bark() is Dog's own method"}]}
+
         ```
 
         ### In practice
 
-        A small fragment to understand the idea of the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: extend a base class and safely invoke the superclass constructor.
 
-        ```java
-        class Lamp {
-            private boolean isOn;
-
-            Lamp(boolean isOn) {
-                this.isOn = isOn;
-            }
-        }
-        ```**Why it's here:** The field stores the state, the constructor sets the initial value, and `private` protects it from being changed directly.
-
-        **Note:** The public method must control the state change.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
+
         You learned that inheritance (`extends`) creates a class based on an existing ``is type'': the child inherits the parent's fields and methods and adds its own. You saw in the trace that when an object is created, the parent is **built first** (via `super(...)`) and then the child. Inheritance removes code duplication and sets the stage for polymorphism, the next topic.
+
         ### Interactive self-check
+
         First make a prediction in words, then check it with the answer. If you make a mistake, go back to the example and find the line that changes the result.
+
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"What is the main idea of ​​the theme \"Imitation\"?","options":["The execution conforms to the described contract of the theme","The program always ignores this construct","The result depends only on the variable name"],"answer":0,"explanation":"The correct prediction relies on the input, the operation, and the result described in the topic."}
+        {"type":"prediction","lang":"java","question":"What runs first when creating `Dog(\"Rex\")` if its constructor calls `super(name)`?","options":["The Animal constructor, then the body of Dog","The body of Dog, then the Animal constructor","The bark method before either constructor"],"answer":0,"explanation":"In Java, the base-class constructor runs before the subclass constructor body. An explicit super(...) call must be first."}
+
         ```
+
       level: 2
       tags:
         - objects
         - java
   - title: Polymorphism and late binding
-    description: describe the responsibility of the type or object in simple terms.
-      distinguish composition, imitation and polymorphic behavior.
+    description: "After this topic, learners can invoke a subclass method through a base-type reference."
     order: 14
-    exerciseFocus: "one object interaction or behavior choice; do not add frameworks
-      and unnecessary boilerplate"
+    exerciseFocus: "Write a short program demonstrating “invoke a subclass method through a base-type reference”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Polymorphism and late binding
       content: |-
+
         ### Intuitive explanation
+
         Imagine a remote with a single "Sound" button. Point it at a cat - you hear a "meow", at a dog - "haw", at an unknown animal - just "some sound". The button is the same, the action is called the same, and the result depends on **who** you point it at. This is **polymorphism** (from the Greek - "many forms"): one challenge, many possible behaviors.
 
         Now imagine the pain polymorphism takes away. Without it, in order to voice the zoo, you would have to write an `if (animal cat) ... else if (dog) ...` sheet — and every time, adding a new species, try to correct this `if`. Polymorphism allows you to write `a.sound()` **once** and forget it: each object knows how to sound. Added a new class — you don't even need to touch the old code.
@@ -1783,86 +2162,87 @@ topics:
         The mechanism that enables this is called **late binding**: Java decides whose version of a method to call, not at compile time, but at runtime by looking at the actual object in memory.
 
         ### What happens at runtime
+
         Here lies the main trick, and it breaks the intuition of beginners. A variable can be of type `Animal` but *refer* to a `Cat` object. When you write `a.sound()`, Java **ignores** the type of the variable (`Animal`) and looks at the **actual** object in memory (`Cat`) - and calls the feline version.That is, the decision "whose method" is made according to the actual object, and not according to how it was "signed" in the variable declaration. The compiler only checks that the `sound()` method in the `Animal` type exists at all (so that the call is legal), and *which* of the overridden versions to run is already determined by the JVM at the time of the call. That is why a loop through an array of different types of animals makes different sounds, even though the line of code is the same.
 
         ### Minimal code example
+
         ```java
         public class Main {
             public static void main(String[] args) {
                 Animal[] zoo = { new Cat(), new Dog(), new Animal() };
                 for (Animal a : zoo) {
-                    a.sound();   // один виклик — різна поведінка
+                    a.sound();   // one call, different behavior
                 }
             }
         }
 
         class Animal {
-            void sound() { System.out.println("Якийсь звук тварини"); }
+            void sound() { System.out.println("some animal sound"); }
         }
 
         class Cat extends Animal {
-            void sound() { System.out.println("Няв"); }
+            void sound() { System.out.println("Meow"); }
         }
 
         class Dog extends Animal {
-            void sound() { System.out.println("Гав"); }
+            void sound() { System.out.println("Woof"); }
         }
-        ```Output:
         ```
-        Няв
-        Гав
-        Якийсь звук тварини
+
+        **Output:**
+        ```
+
+        Meow
+        Woof
+        some animal sound
         ```
 
         ### Explanation of each line of the example
+
         - `Animal[] zoo = { new Cat(), new Dog(), new Animal() };` — an array declared as `Animal` but holding objects of three different classes.
         - `for (Animal a : zoo)` — at each iteration `a` is seen as `Animal`, although different animals are inside.
         - `a.sound()` is the same string; The JVM looks at the real object each time and calls a version of it: `Meow', `Haw', and for a pure `Animal', the basic ``Some animal sound''.
         - Class `Cat` (and `Dog`) **overrides** `sound()` - the override itself and gives polymorphic behavior.
 
         ### Typical mistakes of a beginner
+
         1. **Think that the method is called by the type of the variable.** No - by the actual object. `Animal a = new Cat()` will be called Meow.
         2. **Confuse overriding and overloading.** Different behavior is enabled only when a subclass **overrides** a method with the same signature.
         3. **Expect polymorphism without inheritance/interface.** There is no common type - not even a single button.
         4. **Forget that fields are NOT polymorphic.** Late binding works on methods, not fields.
 
         ### Which method will be executed?
+
         ```interactive
 
         {"type":"dispatch","call":"a.sound() for a = new Cat() (variable type Animal)","cases":[{"type":"Cat","result":"Nev"},{"type":"Dog","result":"Hav"},{"type":"Animal","result":"Some kind of animal sound"}],"note":"The variable type is Animal, but the method of the actual object in memory is called. The right version is chosen by the JVM at runtime — that's late binding."}
+
         ```
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
-        ```java
-        class Lamp {
-            private boolean isOn;
+        **Coding task.** Implement a short program or code snippet that demonstrates: invoke a subclass method through a base-type reference.
 
-            Lamp(boolean isOn) {
-                this.isOn = isOn;
-            }
-        }
-        ```**Why it's here:** The field stores the state, the constructor sets the initial value, and `private` protects it from being changed directly.
-
-        **Note:** The public method must control the state change.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
+
         So polymorphism is "one button, many behaviors": you call the method the same way, and the actual object dictates the result. This works because of late binding—selecting the version of a method at runtime, not at compile time. The practical benefit is huge: code written against a shared type automatically accepts new subclasses without any modifications. Next, we will get to ``abstract'' classes and interfaces — tools that define this "common type" in its pure form.
       level: 2
       tags:
         - objects
         - java
   - title: Abstract classes and interfaces
-    description: describe the responsibility of the type or object in simple terms.
-      distinguish composition, imitation and polymorphic behavior.
+    description: "After this topic, learners can define an interface or abstract-class contract and implement it."
     order: 15
-    exerciseFocus: "one object interaction or behavior choice; do not add frameworks
-      and unnecessary boilerplate"
+    exerciseFocus: "Write a short program demonstrating “define an interface or abstract-class contract and implement it”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Abstract classes and interfaces
       content: |-
+
         ### Intuitive explanation
+
         The word "animal" in itself does not walk down the street - a specific cat or dog does. "Animal" is a general concept, a common idea that does not make sense to create "as is". This is exactly the role played by the **abstract class**: it says "all my descendants are able to make sound", but *exactly* - let everyone decide for themselves. Java simply forbids creating a naked "Animal" through `new'.
 
         The interface comes in from the other side. This is not a "general idea", but a **contract**: a dry list of skills without any hints on how to perform them. "If you want to be called Movable, you must know how to move()." The socket does not ask whether you are a lamp or a vacuum cleaner: you have the right plug - turn it on. The interface is also not interested in the internals of the class, it only checks that the promised methods are there.
@@ -1870,28 +2250,30 @@ topics:
         Keep in mind a rough but working distinction: an abstract class answers the question "**who is it**" (common nature, ready-made code can be thrown to posterity), an interface is "**what it can do**" (a clean list of abilities).
 
         ### What happens at runtime
+
         An abstract class is a hybrid. Both **ready-made** methods (like `sleep()` - all animals sleep the same) and **abstract** - declared without a body (like `sound()`) can live peacefully in it. Each descendant must add bodies to all abstract methods, otherwise it itself becomes abstract, and the compiler will not skip it.The interface classically does not contain an implementation at all (although modern Java allows default methods as an exception) — the signatures themselves. The class is connected to it with the word `implements` and commits to providing a body to each method. The difference in keywords is not cosmetic: `extends` is "of the same kind" (and inherits the code), and there is only **one** parent; `implements' is "I implement this contract", and a class can take **as many** of such contracts. This is the main reason why interfaces are so popular: they bypass the prohibition against multiple imitation.
 
         ### Minimal code example
+
         ```java
         public class Main {
             public static void main(String[] args) {
                 Animal cat = new Cat();
-                cat.sound();      // своя реалізація
-                cat.sleep();      // успадкована від Animal
+                cat.sound();      // custom implementation
+                cat.sleep();      // inherited from Animal
 
                 Movable car = new Car();
-                car.move();       // виконання контракту
+                car.move();       // implementing the contract
             }
         }
 
         abstract class Animal {
-            abstract void sound();                              // без тіла — обов'язковий до реалізації
-            void sleep() { System.out.println("Тварина спить"); } // готовий метод для всіх нащадків
+            abstract void sound();                              // no body; subclasses must implement it
+            void sleep() { System.out.println("The animal sleeps"); } // ready-to-use method for all subclasses
         }
 
         class Cat extends Animal {
-            void sound() { System.out.println("Няв"); }
+            void sound() { System.out.println("Meow"); }
         }
 
         interface Movable {
@@ -1899,16 +2281,20 @@ topics:
         }
 
         class Car implements Movable {
-            public void move() { System.out.println("Машина рухається"); }
+            public void move() { System.out.println("The car is moving"); }
         }
-        ```Output:
         ```
-        Няв
-        Тварина спить
-        Машина рухається
+
+        **Output:**
+        ```
+
+        Meow
+        The animal sleeps
+        The car is moving
         ```
 
         ### Explanation of each line of the example
+
         - ``abstract class Animal'' is an "idea" class; `new Animal()` is not allowed.
         - `abstract void sound();` is a method without a body: a promise that each descendant must fulfill.
         - `void sleep() { ... }` is a ready-made method: `Cat` gets it for free, so `cat.sleep()` prints "The animal is sleeping".
@@ -1917,47 +2303,41 @@ topics:
         - `class Car implements Movable' — executes the contract; pay attention to `public` - interface methods are public.
 
         ### Typical mistakes of a beginner
+
         1. **`new` for abstract class.** `new Animal()` is a compilation error; create only specific offspring.
         2. **Not implement all abstract/interface methods.** Then the class itself becomes abstract and does not compile.
         3. **Confuse `extends` and `implements`.** A class is inherited through `extends`, an interface is implemented through `implements`.
         4. **Forget ``public'' in the interface method implementation.** Interface methods are public — access cannot be restricted.
 
         ### Find the error
+
         ```interactive
 
         {"type":"spot-the-bug","lang":"java","question":"Why doesn't this code compile?","lines":["abstract class Animal {","    abstract void sound();","}","class Main {","    public static void main(String[] args) {","        Animal a = new Animal();","        a.sound();","    }","}"],"buggyLine":6,"explanation":"Animal is an abstract class, it has a sound() method without a body. It is impossible to create it through new Animal(): it is not known what a.sound() would do. You can only create a specific descendant, for example new Cat()."}
+
         ```
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
-        ```java
-        class Lamp {
-            private boolean isOn;
+        **Coding task.** Implement a short program or code snippet that demonstrates: define an interface or abstract-class contract and implement it.
 
-            Lamp(boolean isOn) {
-                this.isOn = isOn;
-            }
-        }
-        ```**Why it's here:** The field stores the state, the constructor sets the initial value, and `private` protects it from being changed directly.
-
-        **Note:** The public method must control the state change.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
+
         So, the abstract class corresponds to "who is this" — it sets the common nature and can throw ready-made code to the descendants, but it is not created itself. An interface responds to "what can" is a pure contract, and a class can do many of them at once, bypassing the prohibition against multiple imitation. Both rely on polymorphism from the previous topic: you work with `Animal` or `Movable`, and the actual object provides the specific behavior. Then there are internal and anonymous classes, which often implement such contracts "on the fly".
       level: 2
       tags:
         - objects
         - java
   - title: Inner and anonymous classes
-    description: describe the responsibility of the type or object in simple terms.
-      distinguish composition, imitation and polymorphic behavior.
+    description: "After this topic, learners can use an inner class tied to an outer object."
     order: 16
-    exerciseFocus: "one object interaction or behavior choice; do not add frameworks
-      and unnecessary boilerplate"
+    exerciseFocus: "Write a short program demonstrating “use an inner class tied to an outer object”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Inner and anonymous classes
       content: >-
+
         ### Intuitive explanation
 
         Not every class needs its own house. Sometimes an assistant is needed in
@@ -1999,108 +2379,136 @@ topics:
 
         ```java
 
+
         public class Main {
+
             public static void main(String[] args) {
+
                 Outer outer = new Outer("StudyCod");
-                Outer.Inner inner = outer.new Inner();   // потрібен живий outer
+
+                Outer.Inner inner = outer.new Inner();   // requires a live outer instance
+
                 inner.show();
 
-                Runnable r = new Runnable() {            // анонімний клас на місці
+
+                Runnable r = new Runnable() {            // anonymous class inline
+
                     public void run() {
-                        System.out.println("Анонімний Runnable запущено");
+
+                        System.out.println("Anonymous Runnable started");
+
                     }
+
                 };
+
                 r.run();
+
             }
+
         }
+
 
         class Outer {
+
             private String name;
+
             Outer(String name) { this.name = name; }
 
+
             class Inner {
+
                 void show() {
-                    System.out.println("Внутрішній бачить поле Outer: " + name);
+
+                    System.out.println("Inner sees Outer field: " + name);
+
                 }
+
             }
+
         }
 
-        ```Output:
 
         ```
 
-        Внутрішній бачить поле Outer: StudyCod
+        **Output:**
 
-        Анонімний Runnable запущено
 
         ```
+
+
+        Inner sees Outer field: StudyCod
+
+        Anonymous Runnable started
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `new Outer("StudyCod")` — we create an external object; its `private
+
         name' becomes "StudyCod".
 
+
         - `outer.new Inner()` is an unusual syntax: an inner object is born from
+
         a specific `outer` and accesses its `name` through a hidden reference.
 
+
         - `inner.show()` — and really prints someone else's `private' field as
+
         if it were one's own.
 
+
         - `new Runnable() { public void run() {...} }` — anonymous class:
+
         implementation of `Runnable` directly in line, without a separate name.
+
 
         - `r.run()` - Runs this one-time implementation.
 
+
         ### Typical mistakes of a beginner
 
+
         1. **Create inner class without outer.** `new Outer.Inner()` does not
+
         work - requires `outer.new Inner()`.
 
+
         2. **Want to reuse an anonymous class.** There is no name - the second
+
         such object cannot be created.
 
+
         3. **Get lost in parentheses.** The body of an anonymous class ends with
+
         `}` and the entire expression ends with `};` followed by a semicolon.
 
+
         4. **Forget that the anonymous class sees only the final (effectively
+
         final) local variables** of the external method.
+
 
         ### Find the error
 
+
         ```interactive
 
-
-        {"type":"spot-the-bug","lang":"java","question":"Why doesn't this line
-        compile?","lines":["Outer outer = new Outer();","Outer.Inner inner = new
-        Outer.Inner();","inner.show();"],"buggyLine":2,"explanation":"Inner is a
-        non-static inner class, so each of its objects is bound to a specific
-        Outer. It cannot be created \"in the void\" through new Outer.Inner() —
-        you need outer.new Inner() to specify which external object it belongs
-        to."}
+        {"type":"spot-the-bug","lang":"java","question":"Why doesn't this line compile?","lines":["Outer outer = new Outer();","Outer.Inner inner = new Outer.Inner();","inner.show();"],"buggyLine":2,"explanation":"Inner is a non-static inner class, so each of its objects is bound to a specific Outer. It cannot be created \"in the void\" through new Outer.Inner() — you need outer.new Inner() to specify which external object it belongs to."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: use an inner class tied to an outer object.
 
-        ```java
-
-        class Lamp {
-            private boolean isOn;
-
-            Lamp(boolean isOn) {
-                this.isOn = isOn;
-            }
-        }
-
-        ```**Why it's here:** The field stores the state, the constructor sets
-        the initial value, and `private` protects it from being changed
-        directly.
-
-        **Note:** The public method must control the state change.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -2116,15 +2524,15 @@ topics:
         - objects
         - java
   - title: enum
-    description: explain the main idea of ​​the topic in your own words. read a
-      short example and predict its outcome.
+    description: "After this topic, learners can represent a bounded set of constants with an enum that has fields or behavior."
     order: 17
-    exerciseFocus: "one key idea of ​​Java with short deterministic stdout and
-      boundary case checking"
+    exerciseFocus: "Write a short program demonstrating “represent a bounded set of constants with an enum that has fields or behavior”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: enum
       content: |-
+
         ### Intuitive explanation
+
         Take a look at a typical rookie bug. The status of the order is stored as a line: `status = "completed"`. And somewhere further on, they check `if (status.equals("Done"))` — and it silently does not work because of a capital letter. Or someone writes ``done'' with a typo — and the compiler doesn't even care, because it's just text. A string is ready to accept any value, which is why it's a bad watchdog for a set of **fixed** states.
 
         This is where **enum** (enumeration) comes out. You pre-declare an exhaustive list of valid values ​​- `NEW`, `PAID`, `SHIPPED` - and Java allows the variable to accept **only** those. Wrote non-existent `SHPPED`? Compilation error before launch. An Enum turns the "agreement between programmers" into a rule that the machine follows.
@@ -2132,9 +2540,11 @@ topics:
         Think of an enum as a closed club with a finite list of members: days of the week, sides of the world, user roles, traffic light states. Everything where there are exactly as many options as there are, and a new one will not appear in the process of work.
 
         ### What happens at runtime
+
         The main thing to understand: enum values are not strings or numbers, but real **single objects**. `Day.SATURDAY` exists in the program in exactly one instance, created once when the class is loaded. Therefore, they can (and should) be compared using `==` — it's fast and safe, unlike strings.Each element has useful "free" methods: `name()` returns its name as text, `ordinal()` is the ordinal number in the list (numbering from zero!), and static `values()` returns an array of all elements that are convenient to loop through. But the most delicious thing is that enum is great friends with `switch': the compiler will even tell you if you forgot to process one of the options. Moreover, enum is a full-fledged class: it can be given a constructor, fields and methods, so each element can carry its own data (for example, a planet has its own mass).
 
         ### Minimal code example
+
         ```java
         public class Main {
             enum Day { MONDAY, TUESDAY, SATURDAY, SUNDAY }
@@ -2149,16 +2559,19 @@ topics:
             public static void main(String[] args) {
                 Day today = Day.SATURDAY;
                 System.out.println(today);            // name()
-                System.out.println(today.ordinal());  // позиція у списку
-                System.out.println(isWeekend(today)); // enum у switch
+                System.out.println(today.ordinal());  // position in the list
+                System.out.println(isWeekend(today)); // enum in switch
                 for (Day d : Day.values()) {
                     System.out.print(d + " ");
                 }
                 System.out.println();
             }
         }
-        ```Output:
         ```
+
+        **Output:**
+        ```
+
         SATURDAY
         2
         true
@@ -2166,6 +2579,7 @@ topics:
         ```
 
         ### Explanation of each line of the example
+
         - `enum Day { ... }` — declares four and only four possible values.
         - `System.out.println(today)` → `SATURDAY`: By default, the element name is printed.
         - `today.ordinal()` → `2`: `SATURDAY` is third in the list, but numbered from zero, so `2`.
@@ -2173,15 +2587,18 @@ topics:
         - `Day.values()` — an array of all elements in the order of announcement; the loop prints them with a space.
 
         ### Typical mistakes of a beginner
+
         1. **Keep states as strings instead of enums.** You lose compiler checking and catch bugs on typos.
         2. **Confuse `ordinal()` with "number from 1".** The calculation starts from zero.
         3. **Tie the logic to `ordinal()`.** Rearrange the elements — and the numbers will float; it is better to rely on the constants themselves.
         4. **Compare enum via `equals` with string.** `today.equals("SATURDAY")` is `false`; compare with `Day.SATURDAY` via `==`.
 
         ### Try to predict
+
         ```interactive
 
         {"type":"prediction","lang":"java","question":"enum Size { S, M, L, XL } What will System.out.println(Size.L.ordinal()); print?","options":["1","2","3","L"],"answer":1,"explanation":"ordinal() returns the position in the list, counting from zero: S=0, M=1, L=2, XL=3. So L.ordinal() is 2."}
+
         ```
 
         ### In practice
@@ -2190,25 +2607,31 @@ topics:
         ```java
         enum Status { READY, DONE }
         Status status = Status.READY;
-        ```**Why it's here:** `enum` creates a type with a fixed set of valid values.
+        ```
+
+        **Why it's here:** `enum` creates a type with a fixed set of valid values.
 
         **Note:** This is safer than random status strings.
 
+        **Coding task.** Implement a short program or code snippet that demonstrates: represent a bounded set of constants with an enum that has fields or behavior.
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
+
         So an enum is a closed, exhaustive list of named value objects that the compiler watches over: a nonexistent variant simply doesn't compile. You've seen useful methods (`name()`, `ordinal()`, `values()`), safe comparison via `==`, and a natural friendship with `switch`. And since enum is a full-fledged class under the hood, each element can be given its own fields and methods. Next, we will move on to generalizations (generics), which provide type safety not for a set of values, but for entire data structures.
       level: 2
       tags:
         - practice
         - java
   - title: Generics - the basics
-    description: explain the main idea of ​​the topic in your own words. read a
-      short example and predict its outcome.
+    description: "After this topic, learners can parameterize a class or method for compile-time type checking."
     order: 18
-    exerciseFocus: "one key idea of ​​Java with short deterministic stdout and
-      boundary case checking"
+    exerciseFocus: "Write a short program demonstrating “parameterize a class or method for compile-time type checking”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Generics - the basics
       content: >-
+
         ### Intuitive explanation
 
         Imagine life without generalizations. You put lines in a list, get an
@@ -2250,105 +2673,135 @@ topics:
 
         ```java
 
+
         import java.util.ArrayList;
 
+
         public class Main {
-            static class Box<T> {           // T — параметр типу, «місце під тип»
+
+            static class Box<T> {           // T is a type parameter, a placeholder for a type
+
                 private T value;
+
                 Box(T value) { this.value = value; }
+
                 T get() { return value; }
+
             }
+
 
             public static void main(String[] args) {
+
                 ArrayList<String> names = new ArrayList<>();
-                names.add("Оля");
-                names.add("Іван");
-                System.out.println(names.get(0));        // без каста — уже String
+
+                names.add("Olha");
+
+                names.add("Ivan");
+
+                System.out.println(names.get(0));        // no cast needed; already a String
+
 
                 Box<Integer> boxInt = new Box<>(42);
-                Box<String> boxStr = new Box<>("привіт");
-                System.out.println(boxInt.get() + 1);    // T = Integer, можна додавати
-                System.out.println(boxStr.get().toUpperCase()); // T = String, є toUpperCase
+
+                Box<String> boxStr = new Box<>("hello");
+
+                System.out.println(boxInt.get() + 1);    // T = Integer; addition is available
+
+                System.out.println(boxStr.get().toUpperCase()); // T = String; toUpperCase is available
+
             }
+
         }
 
-        ```Output:
 
         ```
 
-        Оля
+        **Output:**
+
+
+        ```
+
+
+        Olha
 
         43
 
-        ПРИВІТ
+        HELLO
 
         ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `class Box<T>` is a generalized class; `T' is a stub, instead of which
+
         the real type will be substituted.
 
+
         - `ArrayList<String> names` is a list into which the compiler will only
+
         put strings.
+
 
         - `names.get(0)` → `Olya` **no caste**: type already known as `String`.
 
+
         - `Box<Integer> boxInt = new Box<>(42)` — here `T` becomes `Integer`;
+
         `<>` on the right are empty - the type is displayed on the left.
 
+
         - `boxInt.get() + 1` → `43`: since `T = Integer`, you can do arithmetic
+
         with the result.
 
+
         - `boxStr.get().toUpperCase()` → `HELLO`: since `T = String`, string
+
         methods are available.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Do not specify type** - "raw" `ArrayList` without `<>`. Then
+
         `Object` is returned and all the old problems with castes are back.
 
+
         2. **Confuse container and element type.** `List<String>` is a list of
+
         strings, not a string itself.
 
+
         3. **Put wrong type.** `names.add(42)` in `List<String>` is a
+
         compilation error (and that's a good thing!).
 
+
         4. **Expect runtime protection from generics.** All verification is on
+
         compilation; in the bytecode, the type is erased.
+
 
         ### Find the error
 
+
         ```interactive
 
-
-        {"type":"spot-the-bug","lang":"java","question":"Which line does not
-        compile?","lines":["List<String> items = new
-        ArrayList<>();","items.add(\"яблуко\");","items.add(10);","String first
-        = items.get(0);"],"buggyLine":3,"explanation":"items is declared as
-        List<String>, so the compiler only allows you to add strings.
-        items.add(10) tries to put int (Integer) is a compile error. This is how
-        generics catch a bug even before launch."}
+        {"type":"spot-the-bug","lang":"java","question":"Which line does not compile?","lines":["List<String> items = new ArrayList<>();","items.add(\"apple\");","items.add(10);","String first = items.get(0);"],"buggyLine":3,"explanation":"items is declared as List<String>, so the compiler only allows you to add strings. items.add(10) tries to put int (Integer) is a compile error. This is how generics catch a bug even before launch."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: parameterize a class or method for compile-time type checking.
 
-        ```java
-
-        static <T> T first(List<T> items) {
-            return items.get(0);
-        }
-
-        ```**Why it's here:** The `T` type parameter allows you to reuse a
-        method for different types without losing compiler validation.
-
-        **Note:** Constrain the generic type if the method needs specific
-        capabilities.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -2364,15 +2817,14 @@ topics:
       tags:
         - practice
         - java
-  - title: Generalization - limitations and PECS
-    description: explain the main idea of ​​the topic in your own words. read a
-      short example and predict its outcome.
+  - title: "Generics: bounds and PECS"
+    description: "After this topic, learners can bound a type parameter and choose extends or super by data flow."
     order: 19
-    exerciseFocus: "one key idea of ​​Java with short deterministic stdout and
-      boundary case checking"
+    exerciseFocus: "Write a short program demonstrating “bound a type parameter and choose extends or super by data flow”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Generalization - limitations and PECS
       content: >-
+
         ### Intuitive explanation
 
         The usual parameter `<T>` says "any type". But often this is not enough.
@@ -2412,111 +2864,146 @@ topics:
 
         ```java
 
+
         import java.util.List;
+
 
         import java.util.ArrayList;
 
+
         public class Main {
-            // обмеження: T мусить уміти порівнюватися
+
+            // constraint: T must be comparable
+
             static <T extends Comparable<T>> T max(List<T> list) {
+
                 T best = list.get(0);
+
                 for (T x : list) {
+
                     if (x.compareTo(best) > 0) best = x;
+
                 }
+
                 return best;
+
             }
 
-            // PECS: джерело — extends (читаємо), приймач — super (пишемо)
+
+            // PECS: producer — extends (read), consumer — super (write)
+
             static <T> void copy(List<? extends T> src, List<? super T> dst) {
+
                 for (T x : src) dst.add(x);
+
             }
+
 
             public static void main(String[] args) {
-                System.out.println(max(List.of(3, 9, 2, 7)));            // числа
-                System.out.println(max(List.of("груша", "яблуко", "банан"))); // рядки
+
+                System.out.println(max(List.of(3, 9, 2, 7)));            // numbers
+
+                System.out.println(max(List.of("pear", "apple", "banana"))); // strings
+
 
                 List<Integer> from = List.of(1, 2, 3);
+
                 List<Number> to = new ArrayList<>();
+
                 copy(from, to);
+
                 System.out.println(to);
+
             }
+
         }
 
-        ```Output:
 
         ```
 
+        **Output:**
+
+
+        ```
+
+
         9
 
-        яблуко
+        apple
 
         [1, 2, 3]
 
         ```
 
 
+
         ### Explanation of each line of the example
 
+
         - `<T extends Comparable<T>>` - restriction: `compareTo` is guaranteed
+
         to be available inside the method.
 
+
         - `max(List.of(3, 9, 2, 7))` → `9`: works for `Integer` because it is
+
         `Comparable`.
 
+
         - `max(List.of("pear", ...))` → `apple`: lines are also `Comparable`;
+
         alphabetically, "I" is the largest.
 
+
         - `copy(List<? extends T> src, List<? super T> dst)` — the source `src`
+
         is only read (`extends`), the receiver `dst` is only written (`super`).
 
+
         - `copy(from, to)` — transfer `Integers` from the list to
+
         `List<Number>`; result `[1, 2, 3]`.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Add to `? extends`.** `list.add(x)` for `List<? extends Number>`
+
         does not compile - it is a "readable" list.
 
+
         2. **Confuse the sides of PECS.** Read — `extends’, write — `super’;
+
         mixed up roles - you will get a compilation error.
 
+
         3. **Think `List<Integer>` is `List<Number>`.** No; this is what
+
         wildcards are needed for.
 
+
         4. **Sculpt wildcards everywhere.** For simple code, the usual `<T>` is
+
         enough; make it difficult only if you really need it.
+
 
         ### Find the error
 
+
         ```interactive
 
-
-        {"type":"spot-the-bug","lang":"java","question":"Why doesn't this method
-        compile?","lines":["static void addOne(List<? extends Number> list)
-        {","    list.add(1);","}"],"buggyLine":2,"explanation":"Letter<? extends
-        Number> is a \"readable source\": the compiler doesn't know if it's a
-        List<Integer>, a List<Double>, or something else, so any add is unsafe
-        and forbidden. To be able to add, you need a List<? super Integer> (PECS
-        rule: Consumer Super)."}
+        {"type":"spot-the-bug","lang":"java","question":"Why doesn't this method compile?","lines":["static void addOne(List<? extends Number> list) {","    list.add(1);","}"],"buggyLine":2,"explanation":"Letter<? extends Number> is a \"readable source\": the compiler doesn't know if it's a List<Integer>, a List<Double>, or something else, so any add is unsafe and forbidden. To be able to add, you need a List<? super Integer> (PECS rule: Consumer Super)."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: bound a type parameter and choose extends or super by data flow.
 
-        ```java
-
-        static <T> T first(List<T> items) {
-            return items.get(0);
-        }
-
-        ```**Why it's here:** The `T` type parameter allows you to reuse a
-        method for different types without losing compiler validation.
-
-        **Note:** Constrain the generic type if the method needs specific
-        capabilities.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -2531,16 +3018,16 @@ topics:
       tags:
         - practice
         - java
-  - title: "Collections: Letter; Set; Map"
-    description: choose the data structure according to the required operations.
-      explain the order, uniqueness, and method of accessing elements.
+  - title: "Collections: List, Set, and Map"
+    description: "After this topic, learners can choose List, Set, or Map for ordering, uniqueness, and lookup needs."
     order: 20
-    exerciseFocus: "one operation on the structure; check for duplicates, missing
-      key or empty collection separately"
+    exerciseFocus: "Write a short program demonstrating “choose List, Set, or Map for ordering, uniqueness, and lookup needs”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "Collections: Letter; Set; Map"
       content: |-
+
         ### Intuitive explanation
+
         An array is great as long as you have a fixed "shelf of numbered cells". But life throws up other questions: "but remove repetitions", "but find the meaning by name, not by number", "but add as much as you need, without counting in advance". For this, there are **collections** — flexible containers from the standard library.
 
         Three workhorses covering almost all needs:
@@ -2549,11 +3036,13 @@ topics:
         - **Map** — dictionary "key → value"; search not by number, but by name. "Phone book: name → number".
 
         ### What happens at runtime
+
         The difference is not cosmetic - each collection has its own "character". A `List` dutifully stores everything given, along with duplicates and order. `Set` for each `add` first asks itself: "does such an element already exist?" — and if there is, he silently ignores it. `Map` holds pairs, and if you put a new value after an **already existing key**, the old one is simply overwritten by the new one - the keys are unique, just like in `Set`.
 
         That is why choosing a collection is a choice of behavior. Duplicates are required and the order is `List`. Required uniqueness is `Set`. You need to search by name — `Map'. Getting it wrong here = getting completely different behavior than expected.Under the hood, they have different mechanisms, and this affects the speed. `ArrayList' is an array, so accessing by index is instant, but inserting into the middle is expensive. `HashMap` and `HashSet`, thanks to **hashing**, find an element in almost constant time regardless of size - so the question "is there such a value?" in `Set` is performed much faster than iterating through the entire `List`. At a dozen elements, the difference is not noticeable, but at a million it decides everything.
 
         ### Minimal code example
+
         ```java
         import java.util.*;
 
@@ -2564,27 +3053,32 @@ topics:
 
                 Map<String, Integer> map = new HashMap<>();
                 map.put("a", 1);
-                map.put("a", 2);                 // перезапис за тим самим ключем
+                map.put("a", 2);                 // overwrite using the same key
 
-                System.out.println(list.size()); // 3 — список зберігає дублікати
-                System.out.println(set.size());  // 2 — множина прибирає дублікати
-                System.out.println(map.get("a"));// 2 — лишається останнє значення
+                System.out.println(list.size()); // 3 — a list keeps duplicates
+                System.out.println(set.size());  // 2 — a set removes duplicates
+                System.out.println(map.get("a"));// 2 — last value wins
             }
         }
-        ```Output:
         ```
+
+        **Output:**
+        ```
+
         3
         2
         2
         ```
 
         ### Explanation of each line of the example
+
         - `new ArrayList<>(List.of("a", "b", "a"))` is a list of three elements, in particular the repeated `"a"`.
         - `new HashSet<>(list)` — we pour the same content into a set; she will leave one copy of each.
         - `map.put("a", 1); map.put("a", 2);` - the second `put` after the key `"a"` **overwrites** the first value.
         - `list.size()` → `3`, `set.size()` → `2` (the duplicate is gone), `map.get("a")` → `2` (the last one remains).
 
         ### Typical mistakes of a beginner
+
         1. **Expect order or indices from `Set`.** In `HashSet` the order is unpredictable, `get(0)` does not exist.
         2. **Wondering that `Set` "ate" an element.** This is not a bug - it should be: duplicates are discarded.
         3. **Put in the `Map` by the existing key and wait for both values.** A new `put` by the same key erases the old one.
@@ -2592,47 +3086,48 @@ topics:
         5. **Put your own objects in `Set`/`Map` without `equals`/`hashCode`.** Without them, the collection will not recognize "equal" objects (see separate topic).
 
         ### Try to predict
+
         ```interactive
 
         {"type":"prediction","lang":"java","question":"They put \"a\", \"b\", \"a\" in the list, and then poured it into a HashSet. What will set.size() return?","options":["3","2","1","error"],"answer":1,"explanation":"A HashSet stores only unique values. Of the three elements \"a\", \"b\", \"a\", the repeated \"a\" is discarded, so there are 2 elements in the set."}
+
         ```
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
-        ```java
-        int[] numbers = {2, 4, 6};
-        System.out.println(numbers[0]);
-        ```**Why it's here:** The array has a fixed size and indices start at `0`.
+        **Coding task.** Implement a short program or code snippet that demonstrates: choose List, Set, or Map for ordering, uniqueness, and lookup needs.
 
-        **Note:** The last index is `length - 1`.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
+
         So, three collections — three characters: `List' (order + duplicates), `Set' (uniqueness) and `Map' (search by key). When you choose a collection, you're actually choosing a behavior, so ask yourself: Do I need order? uniqueness? access by name? Next, we will learn how to iterate and sort them conveniently.
       level: 3
       tags:
         - collections
         - java
   - title: "Collections: iterators and comparisons"
-    description: choose the data structure according to the required operations.
-      explain the order, uniqueness, and method of accessing elements.
+    description: "After this topic, learners can traverse a collection with an iterator and define order with Comparable or Comparator."
     order: 21
-    exerciseFocus: "one operation on the structure; check for duplicates, missing
-      key or empty collection separately"
+    exerciseFocus: "Write a short program demonstrating “traverse a collection with an iterator and define order with Comparable or Comparator”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "Collections: iterators and comparisons"
       content: |-
+
         ### Intuitive explanation
+
         You use `for (String s : list)' every day and don't think about how it works. And under this beautiful loop hides a worker named **iterator** - a small "cursor" object that walks through the collection and hands you the next element at each step. He knows only two questions: "is there more?" (`hasNext()`) and "give the next one" (`next()`). `for-each` is just a polite wrapper over this worker.
 
         Why touch the iterator directly when there is a convenient `for-each'? For one trick that `for-each' **cannot** do is to safely **remove** elements directly during traversal. And here lies the most famous trap of collections: trying to do a `list.remove(...)` inside a `for-each` ends not with what you expect, but with a `ConcurrentModificationException` explosion.
 
         ### What happens at runtime
+
         Why so? The collection maintains an internal change counter (`modCount`). When an iterator is born, it remembers the current value of this counter. If you modify the collection **past the iterator** (via `list.remove`), the counter increments, and the iterator on the next `next()` notices the discrepancy - "I was replaced while running!" — and throws a `ConcurrentModificationException` to avoid giving you corrupted data.
 
         The rescue is elegant: the iterator itself has a `remove()` method that removes the current element **and** synchronously updates its internal accounting — so there is no conflict. Therefore, the rule is simple: if you want to throw away elements during traversal, do it via `it.remove()`, not via the collection.And the **comparison** in collections pops up every time you sort. `Collections.sort(list)` sorts the elements in their "natural order": numbers by magnitude, strings by alphabet. This works because elements can be compared to each other, a mechanism that we will discuss in detail in the `Comparable`/`Comparator` topic.
 
         ### Minimal code example
+
         ```java
         import java.util.*;
 
@@ -2640,90 +3135,98 @@ topics:
             public static void main(String[] args) {
                 List<String> list = new ArrayList<>(List.of("b", "a", "c", "a"));
 
-                Iterator<String> it = list.iterator();   // курсор по колекції
+                Iterator<String> it = list.iterator();   // cursor over the collection
                 while (it.hasNext()) {
                     System.out.print(it.next() + " ");
                 }
                 System.out.println();
 
-                Iterator<String> it2 = list.iterator();   // безпечне видалення
+                Iterator<String> it2 = list.iterator();   // safe removal
                 while (it2.hasNext()) {
                     if (it2.next().equals("a")) {
-                        it2.remove();                      // через ітератор, не через list
+                        it2.remove();                      // through the iterator, not the list
                     }
                 }
                 System.out.println(list);
 
-                Collections.sort(list);                    // сортування
+                Collections.sort(list);                    // sorting
                 System.out.println(list);
             }
         }
-        ```Output:
         ```
+
+        **Output:**
+        ```
+
         b a c a
         [b, c]
         [b, c]
         ```
 
         ### Explanation of each line of the example
+
         - `list.iterator()` — creates a cursor that is in front of the first element.
         - `it.hasNext()` / `it.next()` - check "is there more?" and a step forward; this is how we type `b a c a'.
         - `it2.remove()` — removes the "a" just returned by `next()` **safely**, synchronizing the account; after two deletions `[b, c]` remains.
         - `Collections.sort(list)` — sorts alphabetically; `[b, c]` is already ordered, so does not change.
 
         ### Typical mistakes of a beginner
+
         1. **`list.remove(...)` inside `for-each`.** Classic `ConcurrentModificationException`; remove via `it.remove()`.
         2. **Call `next()` without `hasNext()`.** When there are no more elements - `NoSuchElementException`.
         3. **Expect to reuse the iterator.** It is disposable: passed the collection - instantiate a new one.
         4. **Calling `it.remove()` twice in a row** or before the first `next()` is also an error.
 
         ### Find the error
+
         ```interactive
 
         {"type":"spot-the-bug","lang":"java","question":"Why does this code crash with a ConcurrentModificationException?","lines":["List<String> list = new ArrayList<>(List.of(\"a\", \"b\", \"a\"));","for (String s : list) {","    if (s.equals(\"a\")) {","        list.remove(s);","    }","}"],"buggyLine":4,"explanation":"for-each works through the iterator, and list.remove(s) modifies the collection past it. In the next step, the iterator notices that modCount does not match and throws a ConcurrentModificationException. It is correct to bypass the explicit Iterator and call it.remove()."}
+
         ```
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
-        ```java
-        int[] numbers = {2, 4, 6};
-        System.out.println(numbers[0]);
-        ```**Why it's here:** The array has a fixed size and indices start at `0`.
+        **Coding task.** Implement a short program or code snippet that demonstrates: traverse a collection with an iterator and define order with Comparable or Comparator.
 
-        **Note:** The last index is `length - 1`.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
+
         So, under `for-each`, an iterator always works — a cursor with a `hasNext()`/`next()` pair. The main reason to pick it up is for safe removal when traversing through `it.remove()`, because `list.remove()` inside the loop throws a `ConcurrentModificationException` (due to a `modCount` discrepancy). We also saw the ``Collections.sort'' basic sorting, which relies on comparing elements. It is this ability to be compared - `equals`, `hashCode`, `Comparable`, `Comparator` - that we will analyze further.
       level: 3
       tags:
         - collections
         - java
   - title: "Comparison of objects: equals; hashCode; Comparable; Comparator"
-    description: describe the responsibility of the type or object in simple terms.
-      distinguish composition, imitation and polymorphic behavior.
+    description: "After this topic, learners can keep equals() consistent with hashCode() and choose the required ordering."
     order: 22
-    exerciseFocus: "one object interaction or behavior choice; do not add frameworks
-      and unnecessary boilerplate"
+    exerciseFocus: "Write a short program demonstrating “keep equals() consistent with hashCode() and choose the required ordering”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "Comparison of objects: equals; hashCode; Comparable; Comparator"
       content: |-
+
         ### Intuitive explanation
+
         Objects can be compared in two different ways: either they are the **same** object in memory, or they are **the same in content**. The `==` operator checks the first (reference) and the `equals` method checks the second (content). By default `equals` also compares references, so to compare "by content" it needs to be **overridden**.
 
         Next to `equals` there is always `hashCode' - the number-"imprint" of the object, according to which `HashMap`/`HashSet` quickly distributes elements by "baskets". And for arrangement (sorting) there are `Comparable` and `Comparator`.
 
         ### What happens at runtime
+
         The main rule is that if two objects are equal by `equals`, they **must** have the same `hashCode`. Otherwise `HashSet` will put two "same" objects in different baskets and treat them as different - the collection will not work properly. Therefore `equals` and `hashCode` are always overridden **together**.
 
         For sorting, the object implements `Comparable` with a `compareTo` method that sets the "natural order" and returns a negative/zero/positive number:
         ```java
         public int compareTo(Point p) { return Integer.compare(this.x, p.x); }
-        ```And `Comparator` is a separate, external sorting rule that is passed to `list.sort(...)` when different orders are required. Nowadays, they are built declaratively: `Comparator.comparing(User::age).thenComparing(User::name)` - "sort by age, and for the same age - by name." The string `thenComparing` is read as a list of priorities.
+        ```
+
+        And `Comparator` is a separate, external sorting rule that is passed to `list.sort(...)` when different orders are required. Nowadays, they are built declaratively: `Comparator.comparing(User::age).thenComparing(User::name)` - "sort by age, and for the same age - by name." The string `thenComparing` is read as a list of priorities.
 
         To appreciate why `hashCode` is so important, look at how `HashSet` searches for an element. First, it takes the `hashCode` of the object and instantly finds the desired "basket" behind it - this gives lightning speed. And only **inside** the basket iterates over the elements via `equals`. Hence the iron rule: if equal objects give a different hash, they will end up in different bins — and `equals' won't even have time to compare them. Good news: modern `records' generate the correct `equals`/`hashCode` pair **automatically**, so for simple data carriers it is not necessary to write them by hand at all.
 
         ### Minimal code example
+
         ```java
         import java.util.Objects;
 
@@ -2752,14 +3255,18 @@ topics:
                 System.out.println(a.hashCode() == b.hashCode());  // true
             }
         }
-        ```Output:
         ```
+
+        **Output:**
+        ```
+
         false
         true
         true
         ```
 
         ### Explanation of each line of the example
+
         - `a == b` → `false`: `a` and `b` are different objects in memory.
         - `a.equals(b)` → `true`: We have overridden `equals`, so the contents (`x` and `y`) are compared.
         - `a.hashCode() == b.hashCode()` → `true`: equal objects must have the same hash.
@@ -2767,82 +3274,85 @@ topics:
         - `instanceof Point` protects against comparison with an object of a different type.
 
         ### Typical mistakes of a beginner
+
         1. **Compare objects/strings via `==`.** `==` is a reference; content requires `equals`.
         2. **Override `equals` but not `hashCode`.** Breaks `HashSet`/`HashMap`.
         3. **`compareTo` returns only 0/1.** Must return **negative, zero or positive**; `Integer.compare(...)` is better than `a - b` (possible overflow).
         4. **Forget type checking in `equals`.** Without `instanceof` possible `ClassCastException`.
 
         ### Find the error
+
         ```interactive
 
-        {"type":"spot-the-bug","lang":"java","question":"Why won't this check work even for the same word?","lines":["String answer = readInput();   // напр. \"yes\"","if (answer == \"yes\") {","    System.out.println(\"Підтверджено\");","}"],"buggyLine":2,"explanation":"Strings cannot be compared via ==: it checks the reference, not the content. The string entered is an object other than the \"yes\" literal. Need answer.equals(\"yes\") (or \"yes\".equals(answer) to avoid NullPointerException)."}
+        {"type":"spot-the-bug","lang":"java","question":"Why won't this check work even for the same word?","lines":["String answer = readInput();   // e.g. \"yes\"","if (answer == \"yes\") {","    System.out.println(\"Confirmed\");","}"],"buggyLine":2,"explanation":"Strings cannot be compared via ==: it checks the reference, not the content. The string entered is an object other than the \"yes\" literal. Need answer.equals(\"yes\") (or \"yes\".equals(answer) to avoid NullPointerException)."}
+
         ```
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
-        ```java
-        class Lamp {
-            private boolean isOn;
+        **Coding task.** Implement a short program or code snippet that demonstrates: keep equals() consistent with hashCode() and choose the required ordering.
 
-            Lamp(boolean isOn) {
-                this.isOn = isOn;
-            }
-        }
-        ```**Why it's here:** The field stores the state, the constructor sets the initial value, and `private` protects it from being changed directly.
-
-        **Note:** The public method must control the state change.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
+
         You've learned the difference between `==` (reference) and `equals` (content), memorized the ironclad rule "equal objects equal `hashCode'", and seen how `Comparable`/`Comparator` set the sort order. Correct `equals`/`hashCode` is a condition for correct operation of objects in `HashSet`/`HashMap`, and `compareTo`/`Comparator` is a condition for correct sorting.
       level: 3
       tags:
         - objects
         - java
   - title: Exception handling - the basics
-    description: distinguish the cause of the error from its symptom. choose a
-      narrow test or test for a particular risk.
+    description: "After this topic, learners can distinguish checked from unchecked exceptions and handle the expected type."
     order: 23
-    exerciseFocus: "reproduce one defect or verify one contract; the result must be
-      unambiguous for the auto-check"
+    exerciseFocus: "Write a short program demonstrating “distinguish checked from unchecked exceptions and handle the expected type”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Exception handling - the basics
       content: |
+
         ### Intuitive explanation
+
         Errors during execution are inevitable: the user entered letters instead of a number, the file was not found, division by zero. If such an error is not handled, the program will crash. **Exceptions** (exceptions) are a mechanism that allows you to "catch" an error and react to it, instead of crashing.
 
         The model is simple: the risky code is placed in the `try' block; if an error occurs there, Java "throws" an exception and jumps to the `catch' block where you handle it. The `finally' block is executed **always** — both with and without an error (resources are usually freed there).
 
         ### What happens at runtime
+
         Java executes `try` line by line. As soon as an error occurs, **the rest of the `try` lines are skipped** and control immediately passes to the corresponding `catch`. After `catch` (or if there was no error, immediately after `try`), `finally` is executed. Then the program continues normally, as if nothing had happened.
 
         Importantly, the exception is caught by **type**. All exceptions are objects in the shared hierarchy with the root `Throwable`, and `catch (ArithmeticException e)` will only catch that type (and its descendants). Therefore, there can be several `catch' blocks, from more specific to more general: the first one whose type is suitable will work. If several different errors are handled in the same way, there is a short entry with a vertical bar: `catch (IOException | SQLException e)`. But "catch everything" through `catch (Exception e)' should only be done deliberately - otherwise it is easy to swallow an error that was not expected.Here it is useful to distinguish between two types of exceptions. **Unchecked** (descendants of `RuntimeException` - like `ArithmeticException`, `NullPointerException`) usually means a bug in the logic, and the compiler does not force them to be caught. **Checked** (descendants of `Exception` like `IOException`) are expected external (file, network) failures, and the compiler requires them to be either caught or declared via `throws`. Separate `Error` (like `OutOfMemoryError`) are fatal failures of the JVM itself, which cannot be caught.
 
         ### Minimal code example
+
         ```java
         public class Main {
             public static void main(String[] args) {
                 try {
-                    System.out.println("до помилки");
-                    int x = 10 / 0;                        // кидає ArithmeticException
-                    System.out.println("після помилки");   // не виконається
+                    System.out.println("before the error");
+                    int x = 10 / 0;                        // throws ArithmeticException
+                    System.out.println("after the error");   // will not run
                 } catch (ArithmeticException e) {
                     System.out.println("catch: " + e.getMessage());
                 } finally {
-                    System.out.println("finally завжди");
+                    System.out.println("finally always runs");
                 }
-                System.out.println("далі");
+                System.out.println("continue");
             }
         }
-        ```Output:
         ```
-        до помилки
+
+        **Output:**
+        ```
+
+        before the error
         catch: / by zero
-        finally завжди
-        далі
-        ```Please note: the `"after error"' line is **not** printed - it is omitted because the error occurred earlier.
+        finally always runs
+        continue
+        ```
+
+        Please note: the `"after error"' line is **not** printed - it is omitted because the error occurred earlier.
 
         ### Explanation of each line of the example
+
         - `try { ... }` is error-prone code.
         - `int x = 10 / 0;` — division by zero throws `ArithmeticException`; the next `try` line is skipped.
         - `catch (ArithmeticException e)` — catches exactly this type of error; `e.getMessage()` gives a description ("/ by zero").
@@ -2850,48 +3360,52 @@ topics:
         - ``next'' - the program continued, because the error was processed.
 
         ### Typical mistakes of a beginner
+
         1. **Catch too wide (`catch (Exception e)`) and be silent.** A swallowed error hides a bug; catch a specific type and at least log.
         2. **Wrap all code in `try`.** Wrap only risky lines to avoid hiding other errors.
         3. **Think `try` always goes to `catch`.** `catch` only fires when an error actually occurred.
-        4. **Forget that `finally' is always executed** — even if there is a `return' in `try' or `catch'.{"type":"trace","lang":"java","caption":"Tread try / catch / finally","code":["try {"," System.out.println(\"before error\");"," int x = 10 / 0;"," System.out.println(\"after error\");","} catch (ArithmeticException e) {"," System.out.println(\"catch: \" + e.getMessage());","} finally {"," System.out.println(\"finally always\");","}","System.out.println(\"next\");"],"steps":[{"line":2,"vars":{},"out":"to error","note":"running try"},{"line":3,"vars":{},"note":"10 / 0 → throws ArithmeticException"},{"line":4,"vars":{},"note":"this line is SKIPPED"},{"line":6,"vars":{"e":"/ by zero"},"out":"catch: / by zero","note":"control passed to catch"},{"line":8,"vars":{},"out":"finally always","note":"finally executes always"},{"line":10,"vars":{},"out":"next","note":"program continues after try/catch"}]}
+        4. **Forget that `finally' is always executed** — even if there is a `return' in `try' or `catch'.
+
+        ```interactive
+
+        {"type":"trace","lang":"java","caption":"Tread try / catch / finally","code":["try {"," System.out.println(\"before error\");"," int x = 10 / 0;"," System.out.println(\"after error\");","} catch (ArithmeticException e) {"," System.out.println(\"catch: \" + e.getMessage());","} finally {"," System.out.println(\"finally always\");","}","System.out.println(\"next\");"],"steps":[{"line":2,"vars":{},"out":"to error","note":"running try"},{"line":3,"vars":{},"note":"10 / 0 → throws ArithmeticException"},{"line":4,"vars":{},"note":"this line is SKIPPED"},{"line":6,"vars":{"e":"/ by zero"},"out":"catch: / by zero","note":"control passed to catch"},{"line":8,"vars":{},"out":"finally always","note":"finally executes always"},{"line":10,"vars":{},"out":"next","note":"program continues after try/catch"}]}
+
         ```
 
         ### In practice
 
-        A small fragment to understand the idea of the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: distinguish checked from unchecked exceptions and handle the expected type.
 
-        ```java
-        try {
-            int value = Integer.parseInt(text);
-        } catch (NumberFormatException error) {
-            value = 0;
-        }
-        ```**Why it's here:** `catch` handles a specific type of conversion error.
-
-        **Note:** Intercept the narrowest expected type.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
+
         You learned that exceptions allow you to handle errors without causing the program to crash: risky code in `try`, handling in `catch`, guaranteed cleanup in `finally`. You saw the key in the trace: after an error, the rest of `try` is skipped, control goes to `catch`, and `finally` is executed anyway. Next, how to create your own exception types.
+
         ### Interactive self-check
+
         First make a prediction in words, then check it with the answer. If you make a mistake, go back to the example and find the line that changes the result.
+
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"What is the main idea of ​​Exception Handling - Basics?","options":["The execution conforms to the described contract of the theme","The program always ignores this construct","The result depends only on the variable name"],"answer":0,"explanation":"The correct prediction relies on the input, the operation, and the result described in the topic."}
+        {"type":"prediction","lang":"java","question":"What happens after an `ArithmeticException` is raised inside `try`?","options":["The remaining try statements are skipped, then a matching catch and finally run","Execution continues at the next try statement and finally is skipped","The program exits without checking catch or finally"],"answer":0,"explanation":"After an exception, control moves to a matching catch, skipping the rest of try. finally runs before execution continues."}
+
         ```
+
       level: 3
       tags:
         - quality
         - java
-  - title: Creating your own exceptions
-    description: distinguish the cause of the error from its symptom. choose a
-      narrow test or test for a particular risk.
+  - title: "Inheritance and polymorphism"
+    description: "After this topic, learners can create a custom exception with a useful cause and message."
     order: 24
-    exerciseFocus: "reproduce one defect or verify one contract; the result must be
-      unambiguous for the auto-check"
+    exerciseFocus: "Write a short program demonstrating “create a custom exception with a useful cause and message”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Creating your own exceptions
       content: |-
+
         ### Intuitive explanation
+
         Imagine your registration method resents a negative age by throwing an `IllegalArgumentException("bad")`. Half a year later, a colleague sees this exception in the logs and... doesn't understand anything: "bad" means where, what, why? Standard exceptions are like universal "Error" signs: technically true, but mute on the heart of the problem in your particular domain.
 
         **OwnException** returns this plate's voice. You declare a class with a telling name - `InvalidAgeException`, `InsufficientFundsException` - and the name tells you exactly what went wrong before you even read the message. This is not trivial: in a large system, a meaningful exception name saves hours of investigation.
@@ -2899,9 +3413,11 @@ topics:
         Making such a class is surprisingly simple: inherit from `Exception` (or `RuntimeException`) and add a constructor that passes the message to the parent via `super(message)`. You inherit all the exception "machinery" - the call stack, `getMessage()' - for free.
 
         ### What happens at runtime
+
         This is where the main fork of Java is enabled, which is worth learning. If your exception inherits `Exception`, it is **checked** (checked): the compiler forces you to either declare `throws` in the method signature, or catch it with a `try/catch`. Skip it - the code won't even compile. If you inherit `RuntimeException`, the exception is **unchecked**, and the compiler is silent (as for `NullPointerException`).And the flight of the exception itself looks like this: `throw new InvalidAgeException(...)` **immediately aborts** the method - the lines after `throw` are not executed at all. The control "shoots" up the call stack in search of the nearest `catch' that catches this type. Found - `catch' block is executed; was not found anywhere - the program crashes with a printout of the stack. That is, `throw` is not ``return a value'', but ``emergency ejection''.
 
         ### Minimal code example
+
         ```java
         public class Main {
             static class InvalidAgeException extends Exception {
@@ -2910,9 +3426,9 @@ topics:
 
             static void checkAge(int age) throws InvalidAgeException {
                 if (age < 0) {
-                    throw new InvalidAgeException("Вік не може бути від'ємним: " + age);
+                    throw new InvalidAgeException("Age cannot be negative: " + age);
                 }
-                System.out.println("Вік " + age + " прийнято");
+                System.out.println("Age " + age + " accepted");
             }
 
             public static void main(String[] args) {
@@ -2921,18 +3437,22 @@ topics:
                     try {
                         checkAge(age);
                     } catch (InvalidAgeException e) {
-                        System.out.println("Помилка: " + e.getMessage());
+                        System.out.println("Error: " + e.getMessage());
                     }
                 }
             }
         }
-        ```Output:
         ```
-        Вік 25 прийнято
-        Помилка: Вік не може бути від'ємним: -3
+
+        **Output:**
+        ```
+
+        Age 25 accepted
+        Error: Age cannot be negative: -3
         ```
 
         ### Explanation of each line of the example
+
         - `extends Exception` - makes `InvalidAgeException` a checked exception.
         - `super(message)` — transmits the text to the parent; then it will be retrieved by `getMessage()`.
         - `throws InvalidAgeException` is a mandatory declaration: without it, the method with the checked exception will not compile.
@@ -2940,31 +3460,28 @@ topics:
         - `age = -3` — `throw` ejects from the method; the ``accepted'' line fails, control falls to `catch`, which prints ``Error: ...''.
 
         ### Typical mistakes of a beginner
+
         1. **Forgetting `throws`** for a checked exception is a compilation error.
         2. **Throw an exception without a message** — the bare class name will appear in the logs without an explanation.
         3. **Catch too wide** (`catch (Exception e)`) and swallow the problem silently.
         4. **Confuse checked and unchecked.** `extends Exception` requires `throws`; `extends RuntimeException` does not.
 
         ### Find the error
+
         ```interactive
 
         {"type":"spot-the-bug","lang":"java","question":"Why doesn't this method compile?","lines":["class InvalidAgeException extends Exception {}","","static void checkAge(int age) {","    if (age < 0)","        throw new InvalidAgeException();","}"],"buggyLine":3,"explanation":"InvalidAgeException inherits Exception, that is, it is a checked exception. The method that throws it must either declare throws InvalidAgeException in the signature (line 3), or try/catch it. Without it, the compiler refuses to compile the code."}
+
         ```
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
-        ```java
-        try {
-            int value = Integer.parseInt(text);
-        } catch (NumberFormatException error) {
-            value = 0;
-        }
-        ```**Why it's here:** `catch` handles a specific type of conversion error.
+        **Coding task.** Implement a short program or code snippet that demonstrates: create a custom exception with a useful cause and message.
 
-        **Note:** Intercept the narrowest expected type.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
+
         So a custom exception is a descendant class of `Exception` or `RuntimeException` with a descriptive name that makes the error clear at a glance. Key fork: `extends Exception` gives checked exception (compiler requires `throws`/`catch`), `extends RuntimeException` - unchecked. And remember: `throw` aborts the method and looks for `catch' up the stack. Next, let's move on to the practical topics of the standard library — let's start with strings.
       level: 3
       tags:
@@ -2979,6 +3496,7 @@ topics:
     theory:
       title: "Strings: String; StringBuilder; StringBuffer"
       content: >-
+
         ### Intuitive explanation
 
         A string is text (a sequence of characters). In Java, a string is an
@@ -3021,7 +3539,9 @@ topics:
 
         `
 
-        ```length()` gives the number of characters, `substring` cuts a part,
+        ```
+
+        length()` gives the number of characters, `substring` cuts a part,
         `toUpperCase`/`toLowerCase` changes the case, `contains`/`indexOf`
         searches for a substring, `replace` replaces. Since the string is
         immutable, `s.replace(...)` does not touch `s`, but returns a **new**
@@ -3036,19 +3556,21 @@ topics:
             public static void main(String[] args) {
                 String a = "Java";
                 String b = a;
-                a = a + "!";                       // створює новий рядок, старий не змінюється
+                a = a + "!";                       // creates a new string; the original is unchanged
 
                 System.out.println(a);             // Java!
                 System.out.println(b);             // Java
 
                 String x = "hi";
                 String y = new String("hi");
-                System.out.println(x == y);        // false — різні об'єкти
-                System.out.println(x.equals(y));   // true  — однаковий вміст
+                System.out.println(x == y);        // false — different objects
+                System.out.println(x.equals(y));   // true — equal content
             }
         }
 
-        ```Output:
+        ```
+
+        Output:
 
         ```
 
@@ -3095,13 +3617,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"java","question":"a = \"Java\"; b = a; a =
-        a + \"!\"; — what will System.out.println(b)
-        print?","options":["Java!","Java","empty
-        string","error"],"answer":1,"explanation":"String is unchanged: a = a +
-        \"!\" creates a new string and reassigns a. The variable b still points
-        to the initial line \"Java\", so it prints \"Java\" itself."}
+        {"type":"prediction","lang":"java","question":"a = \"Java\"; b = a; a = a + \"!\"; — what will System.out.println(b) print?","options":["Java!","Java","empty string","error"],"answer":1,"explanation":"String is unchanged: a = a + \"!\" creates a new string and reassigns a. The variable b still points to the initial line \"Java\", so it prints \"Java\" itself."}
 
         ```
 
@@ -3116,7 +3632,9 @@ topics:
 
         System.out.println(message.trim().toLowerCase());
 
-        ```**Why it's here:** `trim()` and `toLowerCase()` create a trimmed
+        ```
+
+        **Why it's here:** `trim()` and `toLowerCase()` create a trimmed
         string.
 
         **Note:** `String' is immutable in Java.
@@ -3133,14 +3651,13 @@ topics:
         - text
         - java
   - title: "Date and time: java.time"
-    description: explain the main idea of ​​the topic in your own words. read a
-      short example and predict its outcome.
+    description: "After this topic, learners can perform java.time date arithmetic with an explicit time zone."
     order: 26
-    exerciseFocus: "one key idea of ​​Java with short deterministic stdout and
-      boundary case checking"
+    exerciseFocus: "Write a short program demonstrating “perform java.time date arithmetic with an explicit time zone”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "Date and time: java.time"
       content: >-
+
         ### Intuitive explanation
 
         Working with dates has a bad reputation — and for good reason. The old
@@ -3182,40 +3699,62 @@ topics:
 
         ```java
 
+
         import java.time.LocalDate;
+
 
         import java.time.Period;
 
+
         import java.time.format.DateTimeFormatter;
 
+
         public class Main {
+
             public static void main(String[] args) {
+
                 LocalDate birthday = LocalDate.of(2010, 3, 15);
+
                 LocalDate exam = LocalDate.of(2026, 6, 1);
 
-                System.out.println(birthday.plusDays(100)); // новий об'єкт
-                System.out.println(birthday);               // оригінал НЕ змінився
+
+                System.out.println(birthday.plusDays(100)); // new object
+
+                System.out.println(birthday);               // the original is unchanged
+
 
                 Period diff = Period.between(birthday, exam);
-                System.out.println(diff.getYears() + " р. " + diff.getMonths()
-                        + " міс. " + diff.getDays() + " дн.");
+
+                System.out.println(diff.getYears() + " y " + diff.getMonths()
+
+                        + " mo " + diff.getDays() + " days");
+
 
                 System.out.println(exam.getDayOfWeek());
 
+
                 DateTimeFormatter f = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+
                 System.out.println(exam.format(f));
+
             }
+
         }
 
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         2010-06-23
 
         2010-03-15
 
-        16 р. 2 міс. 17 дн.
+        16 y 2 mo 17 days
 
         MONDAY
 
@@ -3224,52 +3763,66 @@ topics:
         ```
 
 
+
         ### Explanation of each line of the example
 
+
         - `LocalDate.of(2010, 3, 15)` — March 15, 2010; the month here is a
+
         normal `3`, not ``2'' as in the old `Date`.
+
 
         - `birthday.plusDays(100)` → `2010-06-23`: returns a **new** object.
 
+
         - `System.out.println(birthday)` → `2010-03-15`: the original is
+
         unchanged — here it is, immutability.
 
+
         - `Period.between(...)` → `16 years 2 months. 17 days`: correct
+
         difference taking into account the length of the months.
+
 
         - `exam.getDayOfWeek()` → `MONDAY`: June 1, 2026 is Monday.
 
+
         - `exam.format(f)` → `01.06.2026`: date in `dd.MM.yyyy` format.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Ignore the result of `plusDays`/`minusMonths`.** The object is
+
         immutable - without assignment, the change is "lost".
 
+
         2. **Pull the old `Date`/`Calendar`.** In the new code, only
+
         `java.time`.
 
+
         3. **Wait for month from zero.** In `java.time`, March is `3`, humanly
+
         speaking.
 
+
         4. **Confuse `LocalDate` and `LocalDateTime`.** The first has no time;
+
         if you add time, you will get an exception.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"java","question":"LocalDate d =
-        LocalDate.of(2026, 1, 1); d.plusDays(10); What will
-        System.out.println(d);
-        print?","options":["2026-01-11","2026-01-01","compilation
-        error","2026-01-10"],"answer":1,"explanation":"LocalDate is immutable:
-        d.plusDays(10) returns a NEW object, and d itself is not touched. The
-        result was not assigned anywhere, so it is lost, and d remains
-        2026-01-01. It was necessary: ​​d = d.plusDays(10);"}
+        {"type":"prediction","lang":"java","question":"LocalDate d = LocalDate.of(2026, 1, 1); d.plusDays(10); What will System.out.println(d); print?","options":["2026-01-11","2026-01-01","compilation error","2026-01-10"],"answer":1,"explanation":"LocalDate is immutable: d.plusDays(10) returns a NEW object, and d itself is not touched. The result was not assigned anywhere, so it is lost, and d remains 2026-01-01. It was necessary: ​​d = d.plusDays(10);"}
 
         ```
+
 
 
         ### In practice
@@ -3278,37 +3831,57 @@ topics:
 
         ```java
 
+
         LocalDate today = LocalDate.now();
 
-        ```**Why it's here:** `LocalDate` describes a calendar date without the
+
+        ```
+
+        **Why it's here:** `LocalDate` describes a calendar date without the
+
         time of day.
 
+
         **Please note:** Do not mix date, local time, and moment in the
+
         timeline.
+
+
+        **Coding task.** Implement a short program or code snippet that demonstrates: perform java.time date arithmetic with an explicit time zone.
+
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
+
         So `java.time` (since Java 8) distills `LocalDate`, `LocalTime`,
+
         `LocalDateTime` and `ZonedDateTime` into their roles and makes all
+
         objects immutable. A key consequence of immutability: methods of the
+
         `plusDays` stub return a new object and leave the old one intact—the
+
         result must be assigned. You learned how to calculate the difference
+
         using `Period', get the day of the week, and format dates. Next, we will
+
         move on to input-output — reading and writing files through `java.io`.
       level: 3
       tags:
         - practice
         - java
   - title: "I/O: java.io"
-    description: recognize basic Java constructs in code. explain how the value
-      changes at runtime.
+    description: "After this topic, learners can read and write Java I/O streams with try-with-resources and a charset."
     order: 27
-    exerciseFocus: "one main topic operation; simple input or fixed example, no
-      unexplored libraries"
+    exerciseFocus: "Write a short program demonstrating “read and write Java I/O streams with try-with-resources and a charset”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "I/O: java.io"
       content: |-
+
         ### Intuitive explanation
+
         All variable memory lives while the program is running—and disappears as soon as it terminates. In order for the data to survive the shutdown (notes, settings, event log), they must be written to a **file** on the disk. `java.io` is a classic set of tools for just that: reading from and writing to a file.
 
         The key metaphor here is stream. Imagine a pipe through which data flows byte by byte or symbol by symbol: `Writer` is a pipe directed from a program **to** a file, `Reader` is from a file **to** a program. And since a pipe is a physical operating system resource (an open descriptor), it **must be closed** when done. Forget - and the resource will "leak": the file will remain locked, and such leaks may accumulate so much during operation that the system will refuse to open new ones.
@@ -3316,22 +3889,24 @@ topics:
         And here is the protagonist of the topic — the **try-with-resources** construction. It saves you the trouble of closing the thread manually: everything declared in `try (...)` brackets will be closed automatically on exiting the block — even if an exception is thrown inside.
 
         ### What happens at runtime
+
         Let's analyze why `try (...)` is so important. The naive "open → write → close" code has a sneaky hole: if an exception is thrown between the write and `close()`, the `close()` line will simply **not be executed** — and the stream will remain open forever. Catching this manually via `try/finally` is cumbersome and easy to forget.`try-with-resources` solves this cleanly: any object declared in parentheses (and `Writer`/`Reader` can do this, because they implement `AutoCloseable`), Java is guaranteed to close when exiting the block - either through normal completion or through an exception. You write only useful logic, and the language takes care of the "cleaning up".
 
         Another practical detail: "naked" `FileWriter`/`FileReader` communicate with the disk in small portions, which is slow. Therefore, they are wrapped in **buffered** wrappers — `BufferedWriter`/`BufferedReader`: they accumulate data in memory and go to the disk less often and in larger chunks. As a bonus, ``BufferedReader'' provides a convenient ``readLine()'' — reading a file line by line.
 
         ### Minimal code example
+
         ```java
         import java.io.*;
 
         public class Main {
             public static void main(String[] args) throws IOException {
                 try (BufferedWriter writer = new BufferedWriter(new FileWriter("notes.txt"))) {
-                    writer.write("рядок один");
+                    writer.write("line one");
                     writer.newLine();
-                    writer.write("рядок два");
+                    writer.write("line two");
                     writer.newLine();
-                }   // тут потік закривається автоматично
+                }   // the stream is closed automatically here
 
                 try (BufferedReader reader = new BufferedReader(new FileReader("notes.txt"))) {
                     String line;
@@ -3343,56 +3918,61 @@ topics:
                 }
             }
         }
-        ```Output:
         ```
-        1: рядок один
-        2: рядок два
+
+        **Output:**
+        ```
+
+        1: line one
+        2: line two
         ```
 
         ### Explanation of each line of the example
+
         - `new BufferedWriter(new FileWriter("notes.txt"))` — buffered pipe to file; `FileWriter` will create the file if it does not exist.
         - `writer.write(...)` / `writer.newLine()` — write text and line break (do not hardcode `\n`, because `newLine()` takes the correct one for the OS).
         - The closing `}` of the `try` block — auto-`close()` is triggered here, and the buffer is **reset** to disk.
         - `while ((line = reader.readLine()) != null)` — read line by line until we get `null' (end of file); parentheses around the assignment are required.
 
         ### Typical mistakes of a beginner
+
         1. **Don't use try-with-resources.** An exception between write and `close()` will leave the thread open.
         2. **Call `readLine()` twice per iteration** - then half of the lines are "lost".
         3. **Forget that without closing/resetting the buffer** what is recorded may never get into the file.
         4. **Ignore `IOException`.** A disk operation can always fail - it is declared or caught.
 
         ### Find the error
+
         ```interactive
 
         {"type":"spot-the-bug","lang":"java","question":"Why does this loop only print every other line?","lines":["String line;","while (reader.readLine() != null) {","    line = reader.readLine();","    System.out.println(line);","}"],"buggyLine":2,"explanation":"readLine() in EACH call reads and \"eats\" one line. Here it is called twice: in the while condition (the line is read and discarded) and in the body. So each iteration swallows two lines and prints only the second. Correct - read once and save: while ((line = reader.readLine()) != null)."}
+
         ```
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
-        ```java
-        Scanner scanner = new Scanner(System.in);
-        String name = scanner.nextLine();
-        ```**Why this is here:** `Scanner` reads standard input and `nextLine()` returns the entire line.
+        **Coding task.** Implement a short program or code snippet that demonstrates: read and write Java I/O streams with try-with-resources and a charset.
 
-        **Note:** Do not confuse `nextInt()` with `nextLine()`: they handle end of line differently.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
+
         So, `java.io` provides threads - "pipes" for reading (`Reader`) and writing (`Writer`), which must be closed, because they are OS resources. `try-with-resources` makes this closure automatic and reliable even on exceptions. Buffered wrappers (`BufferedReader`/`BufferedWriter`) speed up disk sharing and provide a convenient `readLine()`. Next, we will get acquainted with the more modern API - `NIO.2` (`Path`, `Files`), where the same tasks are solved in one line.
       level: 3
       tags:
         - foundations
         - java
   - title: "NIO.2: Path; Files; Channels"
-    description: explain how parts of a program find and use each other. separate
-      application code from environment settings.
+    description: >-
+      After this topic, learners can build paths with Path, read and write files with Files, and handle IOException.
     order: 28
-    exerciseFocus: "work through a single file and stdout if the theme does not have
-      a judgeable API; not require creating files or IDEs"
+    exerciseFocus: "Build a Path, read a prepared file with Files.readString, and determine the outcome for a missing path."
     theory:
       title: "NIO.2: Path; Files; Channels"
       content: |-
+
         ### Intuitive explanation
+
         In the previous topic, to simply read the file, it was necessary to build a tower of wrappers: `new BufferedReader(new FileReader(...))`, `while readLine` loop, manual assembly of lines. For the most common task - "give me the entire text of a file" - this is too much ceremony. It was to this dissatisfaction that **NIO.2** (from Java 7) responded: the same operations, but briefly and clearly.
 
         NIO.2 is built on two heroes. `Path` is a smart description of the path to a file or folder: not just a string, but an object that knows how to give a file name, a parent folder, stick with another path. ``Files'' is a set of static Swiss Army Knife methods: read the entire file, write, copy, delete, check for existence - all with a single command.
@@ -3400,9 +3980,11 @@ topics:
         Compare the feeling: the old `java.io` is ``build the tool from the parts yourself'' and `Files` is ``here's a ready-made button''. `Files.readString(path)` instead of a whole cycle with a buffer — and you have a file in a line.
 
         ### What happens at runtime
+
         Under the hood, `Files.readString` does exactly what you were doing by hand: it opens a stream, reads everything, **closes** it (even if an error occurs), and returns the result. The difference is that the method takes over all of this routine — including reliably closing the resource. That is, you get `try-with-resources` security for free without writing it explicitly.It is important to understand the limit of application. `readString`/`readAllLines` **load the entire file into memory** - this is ideal for configs and small texts, but dangerous for a file of several gigabytes. For such cases, there is `Files.lines(path)`, which returns a lazy stream of lines and does not hold everything at once. And ``Channels'' (the third component of the theme name) is already a low-level, high-performance channel I/O for heavy scenarios; in daily work, 95% of tasks are closed by ``Path'' and ``Files'' themselves.
 
         ### Minimal code example
+
         ```java
         import java.nio.file.*;
         import java.util.List;
@@ -3411,33 +3993,37 @@ topics:
             public static void main(String[] args) throws Exception {
                 Path path = Path.of("nio_demo.txt");
 
-                Files.writeString(path, "перший\nдругий\nтретій\n");  // запис одним рядком
+                Files.writeString(path, "first\nsecond\nthird\n");  // write three lines
 
-                String whole = Files.readString(path);                // читання цілком
+                String whole = Files.readString(path);                // read the whole file
                 System.out.print(whole);
 
-                List<String> lines = Files.readAllLines(path);        // читання по рядках
-                System.out.println("Усього рядків: " + lines.size());
+                List<String> lines = Files.readAllLines(path);        // read line by line
+                System.out.println("Total lines: " + lines.size());
 
-                System.out.println("Ім'я файлу: " + path.getFileName());
-                System.out.println("Існує? " + Files.exists(path));
+                System.out.println("File name: " + path.getFileName());
+                System.out.println("Exists? " + Files.exists(path));
 
                 Files.delete(path);
-                System.out.println("Існує після видалення? " + Files.exists(path));
+                System.out.println("Exists after deletion? " + Files.exists(path));
             }
         }
-        ```Output:
         ```
-        перший
-        другий
-        третій
-        Усього рядків: 3
-        Ім'я файлу: nio_demo.txt
-        Існує? true
-        Існує після видалення? false
+
+        **Output:**
+        ```
+
+        first
+        second
+        third
+        Total lines: 3
+        File name: nio_demo.txt
+        Exists? true
+        Exists after deletion? false
         ```
 
         ### Explanation of each line of the example
+
         - `Path.of("nio_demo.txt")` is a modern way to get a path (instead of the old `Paths.get`).
         - `Files.writeString(path, ...)` — creates a file and writes text **in one call**, closing the thread itself.
         - `Files.readString(path)` — returns the entire content as a string; `print` prints it without an extra transition.
@@ -3446,15 +4032,18 @@ topics:
         - `Files.exists` before and after `Files.delete` → `true`, then `false`.
 
         ### Typical mistakes of a beginner
+
         1. **Pull `readString` for a gigabyte file.** It loads everything into memory; for large data - `Files.lines`.
         2. **Confuse ``Path'' and the old ``File''.** In the new code, ``Path'' and ``Files''.
         3. **Ignore `IOException`.** File operations may fail - declare `throws` or catch.
         4. **Think `Path.of(...)` creates a file.** No, it's just a path description; the file will appear from the record.
 
         ### Try to predict
+
         ```interactive
 
         {"type":"prediction","lang":"java","question":"Path p = Path.of(\"/home/user/docs/report.txt\"); What will System.out.println(p.getFileName()); print?","options":["/home/user/docs","report.txt","/home/user/docs/report.txt","report"],"answer":1,"explanation":"getFileName() returns only the last element of the path — the actual file name with the extension: report.txt. To get the folder there is getParent() and the whole path is given by toString()."}
+
         ```
 
         ### In practice
@@ -3463,25 +4052,31 @@ topics:
         ```java
         Path path = Path.of("notes.txt");
         String text = Files.readString(path);
-        ```**Why it's here:** `Path` describes the address and `Files.readString` reads it via NIO.2.
+        ```
+
+        **Why it's here:** `Path` describes the address and `Files.readString` reads it via NIO.2.
 
         **Note:** File operations may throw `IOException`.
 
+        **Coding task.** Implement a short program or code snippet that demonstrates: work through a single file and stdout if the theme does not have a judgeable API; not require creating files or IDEs.
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
+
         So, NIO.2 (from Java 7) is a modern, concise answer to the bulkiness of the old `java.io`. `Path` describes the path as a smart object, and `Files` provides ready-made single-line operations: `writeString`, `readString`, `readAllLines`, `exists`, `delete` - with reliable resource closures inside. Remember the limit: integral reading for small files, `Files.lines` for large ones. Next, we will analyze how to save not text to disk, but whole objects - serialization.
       level: 3
       tags:
         - tooling
         - java
   - title: Serialization
-    description: explain the main idea of ​​the topic in your own words. read a
-      short example and predict its outcome.
+    description: "After this topic, learners can serialize compatible data and explain the risk of untrusted deserialization."
     order: 29
-    exerciseFocus: "one key idea of ​​Java with short deterministic stdout and
-      boundary case checking"
+    exerciseFocus: "Write a short program demonstrating “serialize compatible data and explain the risk of untrusted deserialization”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Serialization
       content: >-
+
         ### Intuitive explanation
 
         Writing a line to a file is easy. And how to save an entire **object** —
@@ -3522,92 +4117,135 @@ topics:
 
         ```java
 
+
         import java.io.*;
 
+
         public class Main {
+
             static class Person implements Serializable {
+
                 String name;
+
                 int age;
-                transient String password;   // НЕ серіалізується
+
+                transient String password;   // is not serializable
+
                 Person(String name, int age, String password) {
+
                     this.name = name; this.age = age; this.password = password;
+
                 }
+
                 public String toString() {
-                    return name + ", " + age + ", пароль=" + password;
+
+                    return name + ", " + age + ", password=" + password;
+
                 }
+
             }
+
 
             public static void main(String[] args) throws Exception {
-                Person original = new Person("Оля", 15, "secret123");
-                System.out.println("До: " + original);
+
+                Person original = new Person("Olha", 15, "secret123");
+
+                System.out.println("Before: " + original);
+
 
                 try (var out = new ObjectOutputStream(new FileOutputStream("person.bin"))) {
-                    out.writeObject(original);            // об'єкт → байти
+
+                    out.writeObject(original);            // object → bytes
+
                 }
+
                 Person restored;
+
                 try (var in = new ObjectInputStream(new FileInputStream("person.bin"))) {
-                    restored = (Person) in.readObject();  // байти → об'єкт
+
+                    restored = (Person) in.readObject();  // bytes → object
+
                 }
-                System.out.println("Після: " + restored);
+
+                System.out.println("After: " + restored);
+
             }
+
         }
 
-        ```Output:
 
         ```
 
-        До: Оля, 15, пароль=secret123
+        **Output:**
 
-        Після: Оля, 15, пароль=null
 
         ```
+
+
+        Before: Olha, 15, password=secret123
+
+        After: Olha, 15, password=null
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `implements Serializable` — seal-permission; without it, `writeObject`
+
         will throw a `NotSerializableException`.
+
 
         - `transient String password' — this field is intentionally not packed.
 
+
         - `out.writeObject(original)` - serializes `name` and `age`, but
+
         **skips** `password`.
 
+
         - `(Person) in.readObject()` — restores the object; cast is required
+
         because the method returns an `Object`.
 
+
         - Output "After": `name` and `age` are in place, and `password` became
+
         `null` - it was not saved.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Forget `implements Serializable`** - `NotSerializableException` on
+
         write.
+
 
         2. **Do not cast type** after `readObject()` - it returns `Object`.
 
+
         3. **Wait for the `transient`-field to recover.** No - it will take the
+
         default value (`null`, `0`).
 
+
         4. **Deserialize data from network/untrusted sources.** Dangerous -
+
         Known vulnerability.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"java","question":"Field transient String
-        token = \"abc\"; the object was serialized to a file and immediately
-        deserialized back. What is the token
-        now?","options":["\"abc\"","null","empty string
-        \"\"","error"],"answer":1,"explanation":"transient means \"do not
-        save\". During serialization, the token does not fall into bytes, and
-        during deserialization, no one assigns a value to it - so the
-        field-object acquires a typical null. The original in memory remained
-        \"abc\", but the restored copy does not know this."}
+        {"type":"prediction","lang":"java","question":"Field transient String token = \"abc\"; the object was serialized to a file and immediately deserialized back. What is the token now?","options":["\"abc\"","null","empty string \"\"","error"],"answer":1,"explanation":"transient means \"do not save\". During serialization, the token does not fall into bytes, and during deserialization, no one assigns a value to it - so the field-object acquires a typical null. The original in memory remained \"abc\", but the restored copy does not know this."}
 
         ```
+
 
 
         ### In practice
@@ -3616,26 +4254,47 @@ topics:
 
         ```java
 
+
         ObjectOutputStream out = new ObjectOutputStream(stream);
+
 
         out.writeObject(user);
 
-        ```**Why it's here:** Serialization converts the state of an object into
+
+        ```
+
+        **Why it's here:** Serialization converts the state of an object into
+
         a sequence of bytes for storage or transmission.
+
 
         **Note:** Don't serialize untrusted data without checking the risks.
 
+
+        **Coding task.** Implement a short program or code snippet that demonstrates: serialize compatible data and explain the risk of untrusted deserialization.
+
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
 
+
         So, serialization packs the object into bytes (`Serializable` +
+
         `writeObject`), and deserialization resurrects it (`readObject` + cast).
+
         Fields with `transient' are not saved and after restoration receive a
+
         standard value — convenient for passwords and caches. Keep security in
+
         mind: don't deserialize untrusted data. In practice
 
 
+
         , text formats (JSON), which we will come to later, are more often used
+
         for exchange between systems. Next is reflection: a way to look into the
+
         class and its fields already during execution.
       level: 3
       tags:

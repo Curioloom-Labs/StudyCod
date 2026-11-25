@@ -21,13 +21,27 @@ profiles:
     en:
       inputFormat: "JSON Lines: each line has id, name, and value; empty or invalid records are skipped."
       outputFormat: "Print normalized rows for valid records, then rows=N total=SUM."
+  filesystem:
+    uk:
+      inputFormat: "JSON-об’єкт із fixture-масивом {path, content}, масивом відносних paths та expected шляхів. Прапорці repeat і rejectTraversal вмикають крайові перевірки."
+      outputFormat: "Перевірник створює тимчасові директорії, викликає backup_files і звіряє точний набір файлів та байти. Успіх друкує OK."
+    en:
+      inputFormat: "Filesystem backup cases are supplied as JSON with fixture paths and file contents, selected relative paths, and the expected copied paths. The harness creates an isolated source and destination for every case."
+      outputFormat: "The harness verifies the exact copied path set and byte-for-byte contents, confirms path traversal is rejected, then prints OK."
+  build-report:
+    uk:
+      inputFormat: "Commands are ADD <relative .cpp path>, REMOVE <path>, REPORT, and EXIT. REPORT prints each unique source path in lexical order followed by translation_units=N."
+      outputFormat: "Програма друкує відсортовані шляхи та translation_units=N; помилки мають визначений рядок відповіді."
+    en:
+      inputFormat: "Commands are ADD <relative .cpp path>, REMOVE <path>, REPORT, and EXIT. REPORT prints each unique source path in lexical order followed by translation_units=N."
+      outputFormat: "Invalid paths, duplicate entries, missing removals, repeated reports, empty manifests, and unknown commands have deterministic output."
   web:
     uk:
       inputFormat: "JSON-сценарій HTTP: method, path і необов'язковий body. Кожен сценарій запускається окремо."
-      outputFormat: "Адаптер виводить OK, якщо застосунок відповідає без помилки 5xx; помилки валідації не мають падати."
+      outputFormat: "Адаптер виводить OK, якщо застосунок відповідає без помилки 5xx та виконує заявлені expectedStatus, expectedContains й expectedJson. Для /health обов’язкові HTTP 200 і JSON {status: ok}."
     en:
       inputFormat: "JSON HTTP scenario: method, path, and optional body. Each scenario runs independently."
-      outputFormat: "The adapter prints OK when the app responds without a 5xx error; validation errors must not crash it."
+      outputFormat: "The adapter prints OK when the app avoids 5xx responses and satisfies declared expectedStatus, expectedContains, and expectedJson checks. /health must return HTTP 200 and JSON {status: ok}."
   vision:
     uk:
       inputFormat: "JSON-сценарій fixture: шлях до зображення/відео, режим обробки та параметри порогу."
@@ -111,7 +125,7 @@ projects:
   cpp-cli-calculator: calculator
   python-contact-book: contact
   java-contact-book: contact
-  python-file-backup: records
+  python-file-backup: "filesystem"
   python-product-catalog: collection
   python-text-analyzer: records
   python-data-pipeline: records
@@ -149,5 +163,5 @@ projects:
   cpp-file-indexer: records
   cpp-threaded-log-reader: logs
   cpp-move-safe-loader: records
-  cpp-build-tool: records
+  cpp-build-tool: "build-report"
   cpp-concurrent-queue: queue

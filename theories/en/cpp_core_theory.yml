@@ -1,13 +1,13 @@
 language: CPP
 topics:
   - title: Introduction to C++ and the compiler
-    description: explain what role C++ plays in program execution. read the smallest
-      working example and predict its result.
+    description: "After this topic, learners can distinguish compilation, linking, and execution and identify the failing stage."
     order: 1
-    exerciseFocus: "one short deterministic output without input; check exact stdout"
+    exerciseFocus: "Write a short program demonstrating “distinguish compilation, linking, and execution and identify the failing stage”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Introduction to C++ and the compiler
       content: >-
+
         ### Intuitive explanation
 
         Imagine that you wrote an instruction in your native language: "take a
@@ -53,68 +53,97 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
 
+
         int main() {
+
             std::cout << "Hello, C++!" << std::endl;
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         Hello, C++!
 
         ```
 
 
+
         ### Explanation of each line of the example
 
+
         - `#include <iostream>` — "connect" the input/output library. Without
+
         this line, the compiler will not know what `std::cout` is and the build
+
         will fail.
 
+
         - `int main()` is the **entry point**. The program always starts
+
         execution from here; without `main` there is nothing to run.
 
+
         - `std::cout << "Hello, C++!"` — we send the text to the console. The
+
         arrow `<<` shows the direction of the flow: "we take the string and push
+
         it to the output".
+
 
         - `std::endl` — wraps a string (like pressing Enter).
 
+
         - `return 0;` — we tell the operating system "everything was
+
         successful." Zero here means "no errors".
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Forgetting `#include <iostream>`** — and not understanding why
+
         `std::cout` is suddenly an "unknown name".
 
+
         2. **Skip `std::`** — just write `cout`. It lives in the `std`
+
         namespace, so without the prefix the compiler won't find it.
 
+
         3. **Confuse compilation with launch** — change the text, click "launch"
+
         and be surprised that nothing has changed (because they haven't
+
         recompiled).
 
+
         4. **Ignore warnings** - consider them "trifles" until one of them turns
+
         into a real bug.
+
 
         ### Find the error
 
+
         ```interactive
 
-
-        {"type":"spot-the-bug","lang":"cpp","question":"Which line is the
-        compile error?","lines":["#include <iostream>","int main() {","    cout
-        << \"Hi\";","    return 0;","}"],"buggyLine":3,"explanation":"cout lives
-        in the std namespace, so you need to write std::cout (or add the line
-        using namespace std;). Without the prefix, the compiler will not find
-        the name cout and will stop before starting."}
+        {"type":"spot-the-bug","lang":"cpp","question":"Which line is the compile error?","lines":["#include <iostream>","int main() {","    cout << \"Hi\";","    return 0;","}"],"buggyLine":3,"explanation":"cout lives in the std namespace, so you need to write std::cout (or add the line using namespace std;). Without the prefix, the compiler will not find the name cout and will stop before starting."}
 
         ```
+
 
 
         ### In practice
@@ -123,38 +152,60 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
 
+
         int main() {
-            std::cout << "Привіт, світе!\n";
+
+            std::cout << "Hello, world!\n";
+
         }
 
-        ```**Why it's here:** `main()` runs first and `std::cout` sends the text
+
+        ```
+
+        **Why it's here:** `main()` runs first and `std::cout` sends the text
+
         to stdout.
+
 
         **Note:** Linking error occurs after successful compilation.
 
+
+        **Coding task.** Implement a short program or code snippet that demonstrates: distinguish compilation, linking, and execution and identify the failing stage.
+
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
 
+
         You saw that C++ is a compiled language: all your text is translated
+
         into machine code **in advance**, step by step (compiler → object files
+
         → linker → executable), and only then is it run. This gives speed and
+
         full control at the cost of strictness: errors are caught at compile
+
         time, and warnings should be read as hints. You also wrote the very
+
         first program and analyzed every line of it - this is the foundation on
+
         which everything else will rest.
       level: 1
       tags:
         - orientation
         - c++
   - title: Project settings and file structure
-    description: explain what role C++ plays in program execution. read the smallest
-      working example and predict its result.
+    description: "After this topic, learners can separate declarations and definitions between a header and a source file."
     order: 2
-    exerciseFocus: "one short deterministic output without input; check exact stdout"
+    exerciseFocus: "Write a short program demonstrating “separate declarations and definitions between a header and a source file”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Project settings and file structure
       content: >-
+
         ### Intuitive explanation
 
         Imagine a restaurant menu and the kitchen behind it. The menu says
@@ -197,116 +248,176 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
 
-        int add(int a, int b);   // оголошення: "що є" (роль заголовка .h)
+
+        int add(int a, int b);   // declaration: "what exists" (the role of the .h header)
+
 
         int main() {
+
             std::cout << "3 + 4 = " << add(3, 4) << std::endl;
+
             return 0;
+
         }
 
-        int add(int a, int b) {  // означення: "як працює" (роль .cpp)
+
+        int add(int a, int b) {  // definition: "how it works" (the role of .cpp)
+
             return a + b;
+
         }
 
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         3 + 4 = 7
 
         ```
 
 
+
         ### Explanation of each line of the example
 
+
         - `int add(int a, int b);` — **declaration**: a promise to the compiler
+
         that such a function exists. A semicolon instead of a body is a "menu".
 
+
         - `main` calls `add(3, 4)` - and the compiler already has enough of the
+
         declaration above to allow the call.
 
+
         - `int add(int a, int b) { return a + b; }` below is the **definition**
+
         (body). The linker will look for it when it stitches the program.
 
+
         - If you removed the bottom block, the build would fail at the
+
         **linking** stage, not the compilation.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Declare, but not implement** is a classic "undefined reference"
+
         from the linker.
 
+
         2. **Forget to include the header** in the file where you use the
+
         function: the compiler will not know about it.
 
+
         3. **Change the signature in `.cpp`, but not in `.h`** - now the "menu"
+
         lies and the linker will not find the required body.
 
+
         4. **Place function definitions directly in the header** unnecessarily —
+
         and catch "multiple definition" when the header is included in several
+
         `.cpp`.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"The file contains only the
-        declaration int add(int,int); and call add(3,4) in main, but the body of
-        the function is nowhere. At what stage will the build
-        crash?","options":["Compile: syntax error","Linking: undefined reference
-        to add","Launch: Program crashes","Nothing, will return
-        0"],"answer":1,"explanation":"The compiler trusts the declaration and
-        skips the file. But there is no body of the function, so the linker,
-        stitching together the object files, will not find the implementation of
-        add and will issue an undefined reference. This is the difference
-        between a compilation error and a linking error."}
+        {"type":"prediction","lang":"cpp","question":"The file contains only the declaration int add(int,int); and call add(3,4) in main, but the body of the function is nowhere. At what stage will the build crash?","options":["Compile: syntax error","Linking: undefined reference to add","Launch: Program crashes","Nothing, will return 0"],"answer":1,"explanation":"The compiler trusts the declaration and skips the file. But there is no body of the function, so the linker, stitching together the object files, will not find the implementation of add and will issue an undefined reference. This is the difference between a compilation error and a linking error."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        Three files make the boundary between the interface and implementation explicit:
+
+        ```text
+
+        include/math.hpp  — declaration
+
+        src/math.cpp      — definition
+
+        src/main.cpp      — entry point and usage
+
+        ```
 
         ```cpp
 
-        std::ifstream file("notes.txt");
+        // include/math.hpp
 
-        std::string line;
+        int add(int left, int right);
 
-        std::getline(file, line);
+        // src/math.cpp
 
-        ```**Why it's here:** `ifstream` opens a file and `getline` reads a
-        line.
+        #include "math.hpp"
 
-        **Note:** Make sure the file is actually opened.
+        int add(int left, int right) { return left + right; }
+
+        // src/main.cpp
+
+        #include <iostream>
+
+        #include "math.hpp"
+
+        int main() { std::cout << add(3, 4) << '\n'; }
+
+        ```
+
+        **Why this matters:** The header declares the contract; the `.cpp` file defines it, and the linker combines it with `main.cpp`.
+
+        **Note:** If the declaration exists but its definition is not compiled, the failure occurs at link time.
+
+        **Coding task.** Split `add` between a header and an implementation file, call it from `main.cpp`, and compile both `.cpp` files together.
+
+        **Check.** Build the working version, then omit the implementation file and identify why the linker reports an error.
 
         ### Summary
 
+
         You have understood that a C++ project is naturally divided into a
+
         "menu" (`.h' headers - declarations of what is there) and "kitchen"
+
         (`.cpp` - an implementation of how it works). Headers are not compiled
+
         separately, but copied via `#include`; each `.cpp` becomes an object
+
         file and only the linker stitches everything together. The most
+
         important takeaway is to distinguish between **compilation** errors
+
         (syntax in one file) and **linking** errors (promising a function but no
+
         body). Then this structure will become your daily habit.
       level: 1
       tags:
         - orientation
         - c++
   - title: Basic data types and variables
-    description: recognize basic C++ constructs in code. explain how the value
-      changes at runtime.
+    description: "After this topic, learners can choose a type for its range and avoid narrowing and signedness errors."
     order: 3
-    exerciseFocus: "one main topic operation; simple input or fixed example, no
-      unexplored libraries"
+    exerciseFocus: "Write a short program demonstrating “choose a type for its range and avoid narrowing and signedness errors”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Basic data types and variables
       content: >-
+
         ### Intuitive explanation
 
         Imagine a warehouse with boxes of different shapes: round for balls,
@@ -349,75 +460,106 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
 
+
         int main() {
+
             int age = 25;
+
             double price = 19.99;
+
             char grade = 'A';
+
             bool isOpen = true;
 
+
             std::cout << age << " " << price << " " << grade << " " << isOpen << std::endl;
-            std::cout << "int займає " << sizeof(int) << " байти" << std::endl;
-            std::cout << "double займає " << sizeof(double) << " байтів" << std::endl;
+
+            std::cout << "int uses " << sizeof(int) << " bytes" << std::endl;
+
+            std::cout << "double uses " << sizeof(double) << " bytes" << std::endl;
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         25 19.99 A 1
 
-        int займає 4 байти
+        int uses 4 bytes
 
-        double займає 8 байтів
+        double uses 8 bytes
 
         ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `int age = 25;` is an integer in a 4-byte "box".
+
 
         - `double price = 19.99;` is a fractional number; it needs 8 bytes.
 
+
         - `char grade = 'A';` — **one** character, necessarily in **single**
+
         quotes.
 
+
         - `bool isOpen = true;` is a logical value. Note the output: `true` is
+
         printed as `1` (and `false` is printed as `0`).
 
+
         - `sizeof(int)` is an operator that returns the size of a type in bytes.
+
         It is calculated at compile time, not run time.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Confuse quotes for `char`.** `'A'` is a character, and `"A"` is
+
         already a string; if you mix it up, you will get a type error.
 
+
         2. **Overflow `int`.** A large number (for example, the number of
+
         nanoseconds) will not fit - you need `long long`.
 
+
         3. **Expect perfect accuracy from `double`.** For money, it is better to
+
         count in pennies (`int`) than to catch `0.30000000004`.
 
+
         4. **Store indices/sizes in `int`** when unsigned `size_t` is more
+
         appropriate (it is returned, for example, by container sizes).
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"What will print std::cout
-        << (7 / 2) << \" \" << (7.0 / 2) << std::endl; ?","options":["3.5
-        3.5","3 3.5","3 3","3.5 3"],"answer":1,"explanation":"7 and 2 are
-        integers, so 7/2 is integer division: the fractional part is discarded,
-        leaving 3. And 7.0 is a double, so 7.0/2 counts as a fraction and gives
-        3.5. The type of the operands decides how the operation is performed."}
+        {"type":"prediction","lang":"cpp","question":"What will print std::cout << (7 / 2) << \" \" << (7.0 / 2) << std::endl; ?","options":["3.5 3.5","3 3.5","3 3","3.5 3"],"answer":1,"explanation":"7 and 2 are integers, so 7/2 is integer division: the fractional part is discarded, leaving 3. And 7.0 is a double, so 7.0/2 counts as a fraction and gives 3.5. The type of the operands decides how the operation is performed."}
 
         ```
+
 
 
         ### In practice
@@ -426,38 +568,58 @@ topics:
 
         ```cpp
 
+
         std::string name = "Ada";
+
 
         int age = 36;
 
-        ```**Why it's here:** A type defines what values ​​can be stored and
+
+        ```
+
+        **Why it's here:** A type defines what values ​​can be stored and
+
         what operations are allowed.
+
 
         **Note:** Don't use wider type for no reason.
 
+
+        **Coding task.** Implement a short program or code snippet that demonstrates: choose a type for its range and avoid narrowing and signedness errors.
+
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
 
+
         You have been introduced to the four basic C++ types: `int`, `double`,
+
         `char`, `bool`. A type is both a "box" of a certain size in memory and a
+
         set of allowed actions; thanks to static typing, the compiler catches
+
         type errors in advance. The most important caveats are that `int` is
+
         precise but limited in range, while `double` is capacious but only
+
         approximate - and it is the type of the operands that decides how `/` is
+
         performed. These types will then become the building blocks for all your
+
         variables and expressions.
       level: 1
       tags:
         - foundations
         - c++
   - title: Input and output to the console
-    description: recognize basic C++ constructs in code. explain how the value
-      changes at runtime.
+    description: "After this topic, learners can read values with cin, check stream state, and format output."
     order: 4
-    exerciseFocus: "one main topic operation; simple input or fixed example, no
-      unexplored libraries"
+    exerciseFocus: "Write a short program demonstrating “read values with cin, check stream state, and format output”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Input and output to the console
       content: >-
+
         ### Intuitive explanation
 
         A program without input-output is like a person without senses:
@@ -500,74 +662,104 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
+
 
         #include <string>
 
+
         int main() {
+
             std::string name;
+
             int age;
+
             std::cin >> name >> age;
-            std::cout << "Привіт, " << name << "!" << std::endl;
-            std::cout << "Через рік тобі буде " << age + 1 << std::endl;
+
+            std::cout << "Hello, " << name << "!" << std::endl;
+
+            std::cout << "Next year you will be " << age + 1 << std::endl;
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
 
-        Привіт, Оля!
+        **Output:**
 
-        Через рік тобі буде 15
 
         ```
+
+
+        Hello, Olha!
+
+        Next year you will be 15
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `std::string name; int age;` — we prepare "boxes" for name and age in
+
         advance.
 
+
         - `std::cin >> name >> age;` — we read two values ​​in a row; a space
+
         between `Olya' and `14' separates them.
 
+
         - `std::cout << "Hello, " << name << "!"` — combine the text and the
+
         variable into one output line.
 
+
         - `age + 1` — calculation right inside the output: first `14 + 1` is
+
         calculated, then `15` is printed.
+
 
         - `std::endl` — wraps a line after each message.
 
+
         ### Typical mistakes of a beginner
 
+
         1. **Confuse the arrows** — write `std::cin << x` instead of `>>` (or
+
         vice versa for `cout`).
 
+
         2. **Enter text where a number is waiting** - `cin' crashes and the rest
+
         of the input silently fails.
 
+
         3. **Read string with spaces through `>>`** — `cin >> name` catches only
+
         the first word; a whole string requires `std::getline`.
 
+
         4. **Abuse `std::endl` in loops** — unnecessary buffer resets slow down
+
         the program; `"\n"` is more appropriate there.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"Code: int a, b; std::cin
-        >> a >> b; std::cout << a + b; The user enters the string: 10 20 30 (and
-        Enter). What will be printed?","options":["102030","60","30","10
-        20"],"answer":2,"explanation":"cin >> reads values ​​separated by
-        spaces: a becomes 10, b becomes 20. The third number, 30, is simply left
-        in the stream unread. So a + b = 30. The extra input isn't an error—it's
-        just waiting for the next cin."}
+        {"type":"prediction","lang":"cpp","question":"Code: int a, b; std::cin >> a >> b; std::cout << a + b; The user enters the string: 10 20 30 (and Enter). What will be printed?","options":["102030","60","30","10 20"],"answer":2,"explanation":"cin >> reads values ​​separated by spaces: a becomes 10, b becomes 20. The third number, 30, is simply left in the stream unread. So a + b = 30. The extra input isn't an error—it's just waiting for the next cin."}
 
         ```
+
 
 
         ### In practice
@@ -576,39 +768,60 @@ topics:
 
         ```cpp
 
+
         std::string name;
+
 
         std::getline(std::cin, name);
 
-        ```**Why it's here:** `std::getline` reads the entire line up to Enter,
+
+        ```
+
+        **Why it's here:** `std::getline` reads the entire line up to Enter,
+
         including spaces.
 
+
         **Note:** After `operator>>` you need to take into account the left
+
         carriage return.
+
+
+        **Coding task.** Implement a short program or code snippet that demonstrates: read values with cin, check stream state, and format output.
+
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
+
         You learned to give the program a voice (`std::cout <<`) and ears
+
         (`std::cin >>`) and that the direction of the arrows determines the
+
         direction of the data flow. `cin` separates the input with spaces, takes
+
         into account the type of the variable and breaks on incompatible data,
+
         and `std::endl`, in addition to line carriage, also resets the buffer
+
         (therefore `"\n"` is taken in hot loops). This is your basic
+
         communication channel to the user - next you'll add validations and a
+
         `getline` for strings with spaces.
       level: 1
       tags:
         - foundations
         - c++
   - title: Operators and precedence
-    description: recognize basic C++ constructs in code. explain how the value
-      changes at runtime.
+    description: "After this topic, learners can apply operators with correct precedence and result types."
     order: 5
-    exerciseFocus: "one main topic operation; simple input or fixed example, no
-      unexplored libraries"
+    exerciseFocus: "Write a short program demonstrating “apply operators with correct precedence and result types”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Operators and precedence
       content: >-
+
         ### Intuitive explanation
 
         You know from school: in the expression `2 + 3 · 4', first multiply, and
@@ -651,74 +864,102 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
 
+
         int main() {
-            int a = 2 + 3 * 4;          // множення першим -> 14
-            int b = (2 + 3) * 4;        // дужки міняють порядок -> 20
+
+            int a = 2 + 3 * 4;          // multiply first -> 14
+
+            int b = (2 + 3) * 4;        // parentheses change the order -> 20
+
             bool inRange = (a > 10) && (a < 20);
+
             std::cout << "a = " << a << std::endl;
+
             std::cout << "b = " << b << std::endl;
-            std::cout << "a у діапазоні (10;20)? " << inRange << std::endl;
+
+            std::cout << "a in range (10;20)? " << inRange << std::endl;
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         a = 14
 
         b = 20
 
-        a у діапазоні (10;20)? 1
+        a in range (10;20)? 1
 
         ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `int a = 2 + 3 * 4;` — `3 * 4` is counted first (higher priority),
+
         then `2 + 12` → `14`.
 
+
         - `int b = (2 + 3) * 4;` — parentheses interrupt seniority: first `2 + 3
+
         = 5`, then `5 * 4` → `20`.
 
+
         - `(a > 10) && (a < 20)` - both comparisons are true (`14 > 10` and `14
+
         < 20`), so `&&` returns `true`.
 
+
         - In the output `true` is shown as `1` - this is how `cout` prints
+
         `bool` by default.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Confuse `=` and `==`.** `if (x = 5)` does not compare, but
+
         **assigns** 5 and is always true - a classic hidden bug.
 
+
         2. **Do not put parentheses** in difficult conditions and rely on memory
+
         about priorities.
 
+
         3. **Forget about the short circuit** — rely on the side effect on the
+
         right side of `&&`, which may not work.
 
+
         4. **Confuse `&`/`|` with `&&`/`||`** — bitwise operators will give a
+
         completely different result in a logical condition.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"int x = 0; bool r = (x !=
-        0) && (10 / x > 1); What will happen?","options":["Division by zero is
-        an accident","r will become true","r will become false, the division
-        will not be performed","Compilation
-        error"],"answer":2,"explanation":"The left part of x != 0 is false
-        (because x == 0). Because of the && short circuit, the right-hand side
-        of 10 / x is not even evaluated, so division by zero does not occur and
-        r becomes false. This is how && protects against dangerous operations."}
+        {"type":"prediction","lang":"cpp","question":"int x = 0; bool r = (x != 0) && (10 / x > 1); What will happen?","options":["Division by zero is an accident","r will become true","r will become false, the division will not be performed","Compilation error"],"answer":2,"explanation":"The left part of x != 0 is false (because x == 0). Because of the && short circuit, the right-hand side of 10 / x is not even evaluated, so division by zero does not occur and r becomes false. This is how && protects against dangerous operations."}
 
         ```
+
 
 
         ### In practice
@@ -727,37 +968,56 @@ topics:
 
         ```cpp
 
+
         int total = 2 + 3 * 4;
+
 
         std::cout << total << '\n';
 
-        ```**Why it's here:** The precedence of operators determines the order
+
+        ```
+
+        **Why it's here:** The precedence of operators determines the order
+
         in which an expression is evaluated.
+
 
         **Note:** Do not rely on non-obvious order in production code.
 
+
+        **Coding task.** Implement a short program or code snippet that demonstrates: apply operators with correct precedence and result types.
+
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
 
+
         You've seen that C++ evaluates expressions not left-to-right, but by
+
         **precedence** and **associativity**, and that parentheses are the
+
         easiest way to make intent clear. A key behavior of boolean operators is
+
         **short-circuiting**: `&&` and `||` can skip the right-hand side, and
+
         this saves accidents like empty pointer dereferencing or division by
+
         zero. Do not confuse logical `&&`/`||` with bitwise `&`/`|`. Further,
+
         these conditions will become the basis of `if` branches.
       level: 1
       tags:
         - foundations
         - c++
   - title: Conditional statements if/else
-    description: recognize basic C++ constructs in code. explain how the value
-      changes at runtime.
+    description: "After this topic, learners can build a complete if/else chain without overlapping conditions."
     order: 6
-    exerciseFocus: "one main topic operation; simple input or fixed example, no
-      unexplored libraries"
+    exerciseFocus: "Write a short program demonstrating “build a complete if/else chain without overlapping conditions”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Conditional statements if/else
       content: >-
+
         ### Intuitive explanation
 
         Every morning you make a decision: "if it's raining outside, I'll take
@@ -805,89 +1065,109 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
 
+
         int main() {
+
             int score = 72;
+
             if (score >= 90) {
-                std::cout << "Відмінно" << std::endl;
+
+                std::cout << "Excellent" << std::endl;
+
             } else if (score >= 60) {
-                std::cout << "Задовільно" << std::endl;
+
+                std::cout << "Satisfactory" << std::endl;
+
             } else {
-                std::cout << "Треба підтягнути" << std::endl;
+
+                std::cout << "Needs improvement" << std::endl;
+
             }
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
 
-        Задовільно
+        **Output:**
+
 
         ```
+
+
+        Satisfactory
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `if (score >= 90)' is the first check; `72 >= 90` is false, so the
+
         block is skipped.
 
+
         - `else if (score >= 60)' is the second check; `72 >= 60` is true - we
+
         perform exactly it.
 
+
         - `else' is a "spare" option; it won't get here, because a match was
+
         found above.
 
+
         - The order is critical: if `>= 60` stood **before** `>= 90`, the grader
+
         would also receive "Satisfactory".
+
 
         ### Typical mistakes of a beginner
 
+
         1. **`=` instead of `==`.** `if (x = 5)` assigns, not compares, and is
+
         always true.
 
+
         2. **Skip curly brackets** in a multi-line block - only the first line
+
         will be bound to `if', the rest will always be executed.
 
+
         3. **Incorrect order of conditions** — a wider condition comes before a
+
         narrower one and "catchs" all cases.
 
+
         4. **Compare `double` through `==`** — due to the error `x == 0.3` may
+
         be false; compare with tolerance.
+
 
         ### Find the error
 
+
         ```interactive
 
-
-        {"type":"spot-the-bug","lang":"cpp","question":"The program should print
-        \"Equal 10\" only when n is 10, but it always prints. Where is the
-        error?","lines":["int n = 3;","if (n = 10) {","    std::cout << \"Рівно
-        10\";","} else {","    std::cout <<
-        \"Інше\";","}"],"buggyLine":2,"explanation":"Instead of the comparison n
-        == 10, the assignment n = 10 is written. It puts a ten in n and returns
-        this value; 10 is not zero, so the condition is always true. Need ==
-        instead of =."}
+        {"type":"spot-the-bug","lang":"cpp","question":"The program should print \"Equal 10\" only when n is 10, but it always prints. Where is the error?","lines":["int n = 3;","if (n = 10) {","    std::cout << \"Equal 10\";","} else {","    std::cout << \"Other\";","}"],"buggyLine":2,"explanation":"Instead of the comparison n == 10, the assignment n = 10 is written. It puts a ten in n and returns this value; 10 is not zero, so the condition is always true. Need == instead of =."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: build a complete if/else chain without overlapping conditions.
 
-        ```cpp
-
-        if (score >= 60) {
-            result = "зараховано";
-        } else {
-            result = "ще раз";
-        }
-
-        ```**Why it's here:** A condition defines an execution block.
-
-        **Note:** Do not leave the result uninitialized.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -904,14 +1184,13 @@ topics:
         - foundations
         - c++
   - title: Switch and enumeration
-    description: decompose the algorithm into successive checks or steps. explain
-      why this particular branch or iteration is being executed.
+    description: "After this topic, learners can match enum values in switch without accidental fall-through."
     order: 7
-    exerciseFocus: "one selection/repeat logic; be sure to add the empty, minimal,
-      and limiting case"
+    exerciseFocus: "Write a short program demonstrating “match enum values in switch without accidental fall-through”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Switch and enumeration
       content: >-
+
         ### Intuitive explanation
 
         Imagine a long chain of `if (day == 1) ... else if (day == 2) ... else
@@ -953,90 +1232,109 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
+
 
         enum class Light { Red, Yellow, Green };
 
+
         int main() {
+
             Light signal = Light::Green;
+
             switch (signal) {
-                case Light::Red:    std::cout << "Стій" << std::endl; break;
-                case Light::Yellow: std::cout << "Увага" << std::endl; break;
-                case Light::Green:  std::cout << "Їдь" << std::endl; break;
+
+                case Light::Red:    std::cout << "Stop" << std::endl; break;
+
+                case Light::Yellow: std::cout << "Caution" << std::endl; break;
+
+                case Light::Green:  std::cout << "Go" << std::endl; break;
+
             }
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
 
-        Їдь
+        **Output:**
+
 
         ```
+
+
+        Go
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `enum class Light { Red, Yellow, Green };` — we declare three named
+
         states instead of numbers 0/1/2.
 
+
         - `Light signal = Light::Green;` — the variable holds one of the states;
+
         `Light::` prefix is ​​required for `enum class`.
+
 
         - `switch (signal)' — jump to the `case' that matches the value.
 
+
         - `case Light::Green: ... break;` — this `case` matches, we type "Go"
+
         and `break` comes out of `switch`.
+
 
         - Without `break` execution would "fail" in the following `cases'.
 
+
         ### Typical mistakes of a beginner
 
+
         1. **Forget ``break''** — and get a "failure" in neighboring `cases'
+
         with extra output.
+
 
         2. **Do not add `default'** — and silently miss unexpected values.
 
+
         3. **Try `switch` on `std::string`** - does not compile; there you need
+
         `if/else`.
 
+
         4. **Mixing `enum class` with a number** - `signal == 2` does not
+
         compile (and that's a good thing: this is how `enum class` saves from
+
         errors).
+
 
         ### Find the error
 
+
         ```interactive
 
-
-        {"type":"spot-the-bug","lang":"cpp","question":"For day == 1, the
-        program prints \"Mon\" and unexpectedly also \"Tue\". Where is the
-        reason?","lines":["switch (day) {","    case 1: std::cout <<
-        \"Mon\";","    case 2: std::cout << \"Tue\"; break;","    default:
-        std::cout << \"Other\";","}"],"buggyLine":2,"explanation":"In case 1
-        there is no break, so after printing \"Mon\" the execution \"falls
-        through\" in case 2 and additionally prints \"Tue\". Each case, which is
-        not intended to continue, must end with a break."}
+        {"type":"spot-the-bug","lang":"cpp","question":"For day == 1, the program prints \"Mon\" and unexpectedly also \"Tue\". Where is the reason?","lines":["switch (day) {","    case 1: std::cout << \"Mon\";","    case 2: std::cout << \"Tue\"; break;","    default: std::cout << \"Other\";","}"],"buggyLine":2,"explanation":"In case 1 there is no break, so after printing \"Mon\" the execution \"falls through\" in case 2 and additionally prints \"Tue\". Each case, which is not intended to continue, must end with a break."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: match enum values in switch without accidental fall-through.
 
-        ```cpp
-
-        if (score >= 60) {
-            result = "зараховано";
-        } else {
-            result = "ще раз";
-        }
-
-        ```**Why it's here:** A condition defines an execution block.
-
-        **Note:** Do not leave the result uninitialized.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -1053,14 +1351,13 @@ topics:
         - control
         - c++
   - title: While and do-while loops
-    description: decompose the algorithm into successive checks or steps. explain
-      why this particular branch or iteration is being executed.
+    description: "After this topic, learners can control while and do-while and distinguish pre-test from post-test."
     order: 8
-    exerciseFocus: "one selection/repeat logic; be sure to add the empty, minimal,
-      and limiting case"
+    exerciseFocus: "Write a short program demonstrating “control while and do-while and distinguish pre-test from post-test”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: While and do-while loops
       content: >-
+
         ### Intuitive explanation
 
         Computers are designed not to get bored with repetition. Asking to "do
@@ -1106,89 +1403,110 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
 
+
         int main() {
+
             int n = 6;
+
             int steps = 0;
-            while (n != 1) {          // повторюй, поки не дійдемо до 1
+
+            while (n != 1) {          // repeat until we reach 1
+
                 if (n % 2 == 0) n = n / 2;
+
                 else            n = 3 * n + 1;
+
                 steps++;
+
             }
-            std::cout << "Дійшли до 1 за " << steps << " кроків" << std::endl;
+
+            std::cout << "Reached 1 in " << steps << " steps" << std::endl;
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
 
-        Дійшли до 1 за 8 кроків
+        **Output:**
+
 
         ```
+
+
+        Reached 1 in 8 steps
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `int steps = 0;` — steps counter; we do not know in advance how many
+
         there will be.
+
 
         - `while (n != 1)' is a condition: we rotate until `n' becomes a unit.
 
+
         - `if (n % 2 == 0) n = n / 2;` - divide an even number in half.
+
 
         - `else n = 3 * n + 1;` — we multiply the odd number by 3 and add 1.
 
+
         - `steps++;` — this movement ensures that we count steps; and changing
+
         `n` means that the loop will end sometime. The path 6→3→10→5→16→8→4→2→1
+
         gives 8 steps.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Forget the movement to completion** — do not change what the
+
         condition depends on and get stuck in an endless loop.
 
+
         2. **One-by-one error** - `<` instead of `<=` (or vice versa) and the
+
         loop does one step more/less.
 
+
         3. **Confuse ``while'' and ``do-while''** — when the body should not be
+
         executed under a false condition, and you took ``do-while''.
 
+
         4. **Put `;` immediately after `while (condition)`** — the body will be
+
         empty, and the loop will either freeze or do nothing.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"int x = 10; do { std::cout
-        << x << \" \"; x++; } while (x < 5); What will be
-        printed?","options":["Nothing","10","10 11 12 13 14","5 6 7 8
-        9"],"answer":1,"explanation":"do-while first executes the body and then
-        checks the condition. The body prints 10 and makes x = 11. Now it checks
-        if x < 5 is 11 < 5, which is false, and the loop ends. Therefore,
-        exactly 10 will be printed: the do-while is always executed at least
-        once, even when the initial condition is false."}
+        {"type":"prediction","lang":"cpp","question":"int x = 10; do { std::cout << x << \" \"; x++; } while (x < 5); What will be printed?","options":["Nothing","10","10 11 12 13 14","5 6 7 8 9"],"answer":1,"explanation":"do-while first executes the body and then checks the condition. The body prints 10 and makes x = 11. Now it checks if x < 5 is 11 < 5, which is false, and the loop ends. Therefore, exactly 10 will be printed: the do-while is always executed at least once, even when the initial condition is false."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: control while and do-while and distinguish pre-test from post-test.
 
-        ```cpp
-
-        for (int number = 0; number < 3; ++number) {
-            std::cout << number << '\n';
-        }
-
-        ```**Why it's here:** The counter changes on each iteration and
-        approaches the stopping condition.
-
-        **Note:** Check the first and last values.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -1204,14 +1522,13 @@ topics:
         - control
         - c++
   - title: The for loop and ranges
-    description: decompose the algorithm into successive checks or steps. explain
-      why this particular branch or iteration is being executed.
+    description: "After this topic, learners can use loops for a range with well-defined bounds."
     order: 9
-    exerciseFocus: "one selection/repeat logic; be sure to add the empty, minimal,
-      and limiting case"
+    exerciseFocus: "Write a short program demonstrating “use loops for a range with well-defined bounds”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: The for loop and ranges
       content: >-
+
         ### Intuitive explanation
 
         `while` is a loop for "for now" when the end is unknown. And when you
@@ -1253,102 +1570,117 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
+
 
         #include <vector>
 
+
         int main() {
-            for (int i = 0; i < 5; ++i) {        // класичний for
+
+            for (int i = 0; i < 5; ++i) {        // classic for loop
+
                 std::cout << i << " ";
+
             }
+
             std::cout << std::endl;
 
+
             std::vector<int> prices = {10, 25, 7};
+
             int sum = 0;
+
             for (int p : prices) {                // range-based for
+
                 sum += p;
+
             }
-            std::cout << "Сума = " << sum << std::endl;
+
+            std::cout << "Sum = " << sum << std::endl;
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         0 1 2 3 4
 
-        Сума = 42
+        Sum = 42
 
         ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `for (int i = 0; i < 5; ++i)` — start `i = 0`, we rotate until `i <
+
         5`, after each time `++i`. It turns out 0,1,2,3,4.
 
+
         - `++i` is a step; after the fifth iteration `i` will become 5, `5 < 5`
+
         is false, the loop ends.
 
+
         - `for (int p : prices)` — range-based: `p` alternately becomes 10, 25,
+
         7 — without any index.
+
 
         - `sum += p;` — we accumulate the sum: `10 + 25 + 7 = 42`.
 
+
         ### Typical mistakes of a beginner
 
+
         1. **Off-by-one** — `i <= n` instead of `i < n`, and the loop climbs
+
         outside the array.
 
+
         2. **Change the counter in the body** — and confuse yourself about the
+
         number of iterations.
 
+
         3. **Copy heavy elements** in range-based `for` — for large objects, use
+
         `for (const auto& x : ...)` to avoid making redundant copies.
 
+
         4. **Take `int` for the index of a huge container** — `size_t` is more
+
         appropriate there.
+
 
         ### Running the for loop step by step
 
+
         ```interactive
 
-
-        {"type":"trace","lang":"cpp","caption":"Watch for the counter i and the
-        condition i < 5:","code":["for (int i = 0; i < 5; ++i) {","    std::cout
-        << i << \"
-        \";","}"],"steps":[{"line":1,"vars":{"i":"0"},"note":"Initialization: i
-        = 0."},{"line":1,"vars":{"i":"0"},"note":"0 < 5 is
-        true."},{"line":2,"vars":{"i":"0"},"out":"0
-        "},{"line":1,"vars":{"i":"1"},"note":"++i, then 1 < 5 is
-        true."},{"line":2,"vars":{"i":"1"},"out":"1
-        "},{"line":1,"vars":{"i":"2"},"note":"++i, then 2 < 5 is
-        true."},{"line":2,"vars":{"i":"2"},"out":"2
-        "},{"line":1,"vars":{"i":"3"},"note":"++i, then 3 < 5 is
-        true."},{"line":2,"vars":{"i":"3"},"out":"3
-        "},{"line":1,"vars":{"i":"4"},"note":"++i, then 4 < 5 is
-        true."},{"line":2,"vars":{"i":"4"},"out":"4
-        "},{"line":1,"vars":{"i":"5"},"note":"++i, then 5 < 5 is false, the
-        cycle is complete."}]}
+        {"type":"trace","lang":"cpp","caption":"Watch for the counter i and the condition i < 5:","code":["for (int i = 0; i < 5; ++i) {","    std::cout << i << \" \";","}"],"steps":[{"line":1,"vars":{"i":"0"},"note":"Initialization: i = 0."},{"line":1,"vars":{"i":"0"},"note":"0 < 5 is true."},{"line":2,"vars":{"i":"0"},"out":"0 "},{"line":1,"vars":{"i":"1"},"note":"++i, then 1 < 5 is true."},{"line":2,"vars":{"i":"1"},"out":"1 "},{"line":1,"vars":{"i":"2"},"note":"++i, then 2 < 5 is true."},{"line":2,"vars":{"i":"2"},"out":"2 "},{"line":1,"vars":{"i":"3"},"note":"++i, then 3 < 5 is true."},{"line":2,"vars":{"i":"3"},"out":"3 "},{"line":1,"vars":{"i":"4"},"note":"++i, then 4 < 5 is true."},{"line":2,"vars":{"i":"4"},"out":"4 "},{"line":1,"vars":{"i":"5"},"note":"++i, then 5 < 5 is false, the cycle is complete."}]}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: use loops for a range with well-defined bounds.
 
-        ```cpp
-
-        for (int number = 0; number < 3; ++number) {
-            std::cout << number << '\n';
-        }
-
-        ```**Why it's here:** The counter changes on each iteration and
-        approaches the stopping condition.
-
-        **Note:** Check the first and last values.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -1363,15 +1695,14 @@ topics:
       tags:
         - control
         - c++
-  - title: Features and options
-    description: extract repetitive logic into a comprehensible abstraction. explain
-      data flow through parameters, return, or iteration.
+  - title: "Functions and parameters"
+    description: "After this topic, learners can declare functions with suitable parameters and return results."
     order: 10
-    exerciseFocus: "one script with a clear value stream; not to require individual
-      unit tests instead of a complete program"
+    exerciseFocus: "Write a short program demonstrating “declare functions with suitable parameters and return results”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Features and options
       content: >-
+
         ### Intuitive explanation
 
         Imagine that in three places of the program you count which of two
@@ -1413,99 +1744,123 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
+
 
         #include <string>
 
-        int max2(int a, int b) {        // повертає більше з двох
+
+        int max2(int a, int b) {        // returns the greater of two values
+
             if (a > b) return a;
+
             return b;
+
         }
 
-        void greet(const std::string& name) {  // нічого не повертає
-            std::cout << "Вітаю, " << name << "!" << std::endl;
+
+        void greet(const std::string& name) {  // returns nothing
+
+            std::cout << "Hello, " << name << "!" << std::endl;
+
         }
+
 
         int main() {
+
             std::cout << "max(7, 3) = " << max2(7, 3) << std::endl;
-            greet("Ігор");
+
+            greet("Ihor");
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         max(7, 3) = 7
 
-        Вітаю, Ігор!
+        Hello, Ihor!
 
         ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `int max2(int a, int b)` — the function accepts two integers and
+
         **returns** an integer (`int`).
 
+
         - `if (a > b) return a;` — if the first is greater, we immediately
+
         return it and exit.
 
+
         - `return b;` — otherwise we return the second; we will reach this line
+
         only if `a > b' is false.
 
+
         - `void greet(...)` — function-action: prints a greeting and **returns
+
         nothing**.
 
+
         - `max2(7, 3)` in `main` - the program jumps to `max2`, gets 7 and
+
         substitutes it in the output.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Forget `return'** in a function that should return a value — the
+
         result will be garbage (undefined behavior).
 
+
         2. **Confuse declaration and call** - call `max2(7, 3)` without a
+
         semicolon in the declaration or vice versa.
 
+
         3. **Wrong return type** — declared `int`, but return `double`; part of
+
         the meaning will be silently lost.
 
+
         4. **Monster function** — for 200 lines and without a clear role; it is
+
         better to break it into several small ones.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"void addOne(int x) { x = x
-        + 1; } ... int n = 5; addOne(n); std::cout << n; What will be
-        printed?","options":["6","5","0","Compilation
-        error"],"answer":1,"explanation":"The parameter x is passed by value —
-        the function receives a COPY of n. The line x = x + 1 only changes this
-        copy inside the function; the original variable n in main is not
-        affected. Therefore, 5 will be printed, not 6. In order for the function
-        to change n itself, it must be passed by reference (next topic)."}
+        {"type":"prediction","lang":"cpp","question":"void addOne(int x) { x = x + 1; } ... int n = 5; addOne(n); std::cout << n; What will be printed?","options":["6","5","0","Compilation error"],"answer":1,"explanation":"The parameter x is passed by value — the function receives a COPY of n. The line x = x + 1 only changes this copy inside the function; the original variable n in main is not affected. Therefore, 5 will be printed, not 6. In order for the function to change n itself, it must be passed by reference (next topic)."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: declare functions with suitable parameters and return results.
 
-        ```cpp
-
-        int doubleValue(int value) {
-            return value * 2;
-        }
-
-        ```**Why it's here:** A function has a result type, a parameter, and a
-        body.
-
-        **Note:** A reference or pointer in a parameter changes the data
-        transfer rules.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -1522,14 +1877,13 @@ topics:
         - abstraction
         - c++
   - title: "Passing parameters: values, references, pointers"
-    description: explain where the value lives and who is responsible for the
-      resource. recognize copying, sharing, and object lifetime.
+    description: "After this topic, learners can choose pass-by-value, reference, or pointer."
     order: 11
-    exerciseFocus: "a small example with a clear life time; verify a safe state
-      after an operation and not require manual memory inspection"
+    exerciseFocus: "Write a short program demonstrating “choose pass-by-value, reference, or pointer”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "Passing parameters: values, references, pointers"
       content: >-
+
         ### Intuitive explanation
 
         In the previous topic, you saw a puzzle: a function changes its
@@ -1577,93 +1931,114 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
 
-        void byValue(int x) { x = 99; }   // працює з копією
 
-        void byRef(int& x)  { x = 99; }   // працює з оригіналом
+        void byValue(int x) { x = 99; }   // works with a copy
+
+
+        void byRef(int& x)  { x = 99; }   // works with the original
+
 
         int main() {
+
             int a = 1;
+
             byValue(a);
-            std::cout << "після byValue: a = " << a << std::endl;
+
+            std::cout << "after byValue: a = " << a << std::endl;
+
             byRef(a);
-            std::cout << "після byRef:   a = " << a << std::endl;
+
+            std::cout << "after byRef:   a = " << a << std::endl;
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
 
-        після byValue: a = 1
+        **Output:**
 
-        після byRef:   a = 99
 
         ```
+
+
+        after byValue: a = 1
+
+        after byRef:   a = 99
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `void byValue(int x)` — `x` is a **copy** of the argument; `x = 99`
+
         only changes the copy.
 
+
         - `void byRef(int& x)` — `&` makes `x` an **alias** of the original; `x
+
         = 99` changes `a` itself.
+
 
         - `byValue(a)` — `a` remained `1`: the function touched the copy.
 
+
         - `byRef(a)` — `a` became `99`: the function worked on the same
+
         variable.
 
+
         - All the difference is in one symbol `&` - that's why it's so easy to
+
         forget.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Forgetting `&`** and accidentally changing the copy, wondering why
+
         the original didn't update.
 
+
         2. **Copy large objects** — accept `std::string s` instead of `const
+
         std::string& s`, slowing down the program.
 
+
         3. **Dereference `nullptr`** — `*p`, when `p` is empty, it is a crash
+
         (undefined behavior).
 
+
         4. **To confuse `const T&` with `T&`** is to forget `const` and
+
         inadvertently allow functions to corrupt your object.
+
 
         ### What lies in the memory
 
+
         ```interactive
 
-
-        {"type":"memory","caption":"byRef(a) at runtime: x is an alias of the
-        same cell as a","stack":[{"name":"a","value":"99"},{"name":"x
-        (link)","ref":"a"}],"heap":[],"note":"Unlike a copy, the reference x
-        does not start a new cell - it points to the same one where a lives.
-        Therefore, writing x = 99 directly changes a. That is why transfer by
-        link allows the function to change the original and does not waste
-        memory on the copy."}
+        {"type":"memory","caption":"byRef(a) at runtime: x is an alias of the same cell as a","stack":[{"name":"a","value":"99"},{"name":"x (link)","ref":"a"}],"heap":[],"note":"Unlike a copy, the reference x does not start a new cell - it points to the same one where a lives. Therefore, writing x = 99 directly changes a. That is why transfer by link allows the function to change the original and does not waste memory on the copy."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: choose pass-by-value, reference, or pointer.
 
-        ```cpp
-
-        int doubleValue(int value) {
-            return value * 2;
-        }
-
-        ```**Why it's here:** A function has a result type, a parameter, and a
-        body.
-
-        **Note:** A reference or pointer in a parameter changes the data
-        transfer rules.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -1679,15 +2054,15 @@ topics:
         - memory
         - c++
   - title: Arrays and indexing
-    description: choose the data structure according to the required operations.
-      explain the order, uniqueness, and method of accessing elements.
+    description: "After this topic, learners can index an array within its length and pass its size explicitly."
     order: 12
-    exerciseFocus: "one operation on the structure; check for duplicates, missing
-      key or empty collection separately"
+    exerciseFocus: "Write a short program demonstrating “index an array within its length and pass its size explicitly”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Arrays and indexing
       content: |-
+
         ### Intuitive explanation
+
         Imagine a street with identical houses standing tightly in a row and numbered in order. Knowing the number, you instantly find the right home — you don't have to go from the beginning and go through them all. That's what an **array** is: a series of values ​​of the **same type** lying in memory next to each other, and each has its own number — an **index**.
 
         The main wonder for a beginner: the numbering starts from **zero**. The first element is `a[0]`, the second is `a[1]`, and in an array of 5 elements, the last is `a[4]`, not `a[5]`. The reason is deeper than "that's how they came up with it": the index is actually an **offset** from the start. The first element is at the very beginning, that is, with an offset of 0.
@@ -1695,31 +2070,37 @@ topics:
         Arrays are blazingly fast precisely because of memory contiguity: `a[i]` is simple ``start + i'' arithmetic. But there is a price for speed: the array **does not check the limits**. Ask for `a[100]` in an array of five - there's no stopping you.
 
         ### What happens at runtime
+
         The array name actually points to the address of the **first** element. When you write `a[i]`, C++ counts: "starting address + i × size of one element" - and immediately jumps to the desired cell. No searching, just multiplication and addition. Therefore, access by index costs the same whether it is `a[0]` or `a[1000000]`.
 
         And here is the most dangerous feature of "raw" C++ arrays. An overflow (`a[5]` in an array of 5 elements) is **undefined behavior**. The program will not throw an error; it will simply read or, worse, **overwrite** someone else's memory area. Sometimes everything "works", sometimes it crashes, sometimes it corrupts neighboring data - and such a bug is caught for a hell of a long time.Another pitfall: an array **doesn't remember its own size**. Size exists only in your head and in your code. Therefore, in modern C++, `std::vector` (knows its size and grows by itself) or `std::array` are more often used, and raw arrays are left for special cases.
 
         ### Minimal code example
+
         ```cpp
         #include <iostream>
 
         int main() {
-            int temps[5] = {12, 15, 9, 21, 18};   // 5 елементів, індекси 0..4
+            int temps[5] = {12, 15, 9, 21, 18};   // 5 elements, indices 0..4
             int maxT = temps[0];
             for (int i = 1; i < 5; ++i) {
                 if (temps[i] > maxT) maxT = temps[i];
             }
-            std::cout << "Перший: " << temps[0] << ", останній: " << temps[4] << std::endl;
-            std::cout << "Максимум: " << maxT << std::endl;
+            std::cout << "First: " << temps[0] << ", last: " << temps[4] << std::endl;
+            std::cout << "Maximum: " << maxT << std::endl;
             return 0;
         }
-        ```Output:
         ```
-        Перший: 12, останній: 18
-        Максимум: 21
+
+        **Output:**
+        ```
+
+        First: 12, last: 18
+        Maximum: 21
         ```
 
         ### Explanation of each line of the example
+
         - `int temps[5] = {...};` — an array of 5 integers; indices go from `0` to `4`.
         - `int maxT = temps[0];` — we start the search for the maximum from the first element.
         - `for (int i = 1; i < 5; ++i)` — we pass the rest; the condition `i < 5` (not `<= 5`!) does not allow to go beyond the limits.
@@ -1727,42 +2108,41 @@ topics:
         - `temps[4]` is exactly the **last** element of (18), not `temps[5]`, which does not exist.
 
         ### Typical mistakes of a beginner
+
         1. **Going beyond the limits** — refer to `temps[5]'; no one will warn, and the consequences are unpredictable.
         2. **Forget about zero start** — consider `temps[1]` as the first element.
         3. **Expect that the array knows its size** — the raw array does not store it.
         4. **Huge array on stack** — `int big[10000000]` will overflow the stack; such data is put in `std::vector`.
 
         ### Try to predict
+
         ```interactive
 
         {"type":"prediction","lang":"cpp","question":"int a[3] = {10, 20, 30}; Which appeal will give undefined behavior (out of bounds)?","options":["a[0]","a[2]","a[3]","a[1]"],"answer":2,"explanation":"The array has 3 elements, so valid indices are 0, 1, and 2. The last element is a[2] (value 30). And a[3] is already outside the array: there is no such element, and access to it is undefined behavior. Classic one-by-one error: in an array of N elements, the last index is N-1, not N."}
+
         ```
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
-        ```cpp
-        std::vector<int> numbers{2, 4, 6};
-        std::cout << numbers.at(0) << '\n';
-        ```**Why it's here:** `std::vector` stores a sequence and can change size. `at()` checks for bounds.
+        **Coding task.** Implement a short program or code snippet that demonstrates: index an array within its length and pass its size explicitly.
 
-        **Note:** `operator[]` does not check for bounds.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
+
         You learned that an array is a series of values of the same type, lying in memory next to each other, with indexes from **0** to `N-1`; access `a[i]` is fast offset arithmetic from the origin. Key caveat: raw arrays **do not check for bounds** (stepping beyond them is dangerous undefined behavior) and **do not know their size**. This is why modern C++ prefers `std::vector`, which grows by itself and remembers its size - you'll get to that shortly.
       level: 2
       tags:
         - collections
         - c++
   - title: "Strings: std::string"
-    description: process text without accidentally losing characters or formatting.
-      explain the difference between search, parsing, and transformation.
+    description: "After this topic, learners can process std::string without data loss or confusing position with length."
     order: 13
-    exerciseFocus: "one conversion or string validation; check spaces, case and
-      empty line separately"
+    exerciseFocus: "Write a short program demonstrating “process std::string without data loss or confusing position with length”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "Strings: std::string"
       content: >-
+
         ### Intuitive explanation
 
         In the old C, the text was a pain in the ass: you manually allocated the
@@ -1804,102 +2184,125 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
+
 
         #include <string>
 
+
         int main() {
+
             std::string first = "Ada";
+
             std::string last  = "Lovelace";
-            std::string full  = first + " " + last;   // конкатенація через +
+
+            std::string full  = first + " " + last;   // concatenation with +
+
 
             std::cout << full << std::endl;
-            std::cout << "Символів: " << full.size() << std::endl;
-            std::cout << "Перша літера: " << first[0] << std::endl;
 
-            full += "!";                                // додаємо в кінець
-            std::cout << "Після += : " << full << std::endl;
+            std::cout << "Characters: " << full.size() << std::endl;
+
+            std::cout << "First character: " << first[0] << std::endl;
+
+
+            full += "!";                                // append to the end
+
+            std::cout << "After +=: " << full << std::endl;
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         Ada Lovelace
 
-        Символів: 12
+        Characters: 12
 
-        Перша літера: A
+        First character: A
 
-        Після += : Ada Lovelace!
+        After +=: Ada Lovelace!
 
         ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `std::string first = "Ada";` — we create a string; he manages the
+
         memory himself.
 
+
         - `first + " " + last` — operator `+` glues lines into a new one: `"Ada
+
         Lovelace"`.
 
+
         - `full.size()` — length in bytes; here the text is Latin, so it is
+
         exactly 12 characters.
 
+
         - `first[0]` — access to a character by index, as in an array: the first
+
         letter ``A''.
 
+
         - `full += "!";` — add to the end in place; the string itself will
+
         allocate memory for the new character.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Forgetting `#include <string>`** — and not understanding why
+
         `std::string` is "unknown".
 
+
         2. **Copy long strings** — accept parameter as `std::string` instead of
+
         `const std::string&`.
 
+
         3. **Confuse bytes and symbols** - think that `.size()` for Cyrillic is
+
         equal to the number of letters.
 
+
         4. **Go beyond the bounds via `[]`** — `s[i]` does not check the index;
+
         to check is `s.at(i)` which will throw an exception.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"std::string a = \"abc\";
-        std::string b = a; b += \"X\"; std::cout << a << \" \" << b; What will
-        be printed?","options":["abcX abcX","abc abcX","abc abc","abcX
-        abc"],"answer":1,"explanation":"The string b = a creates an INDEPENDENT
-        copy of the contents of a, not a shared reference. Therefore, b += \"X\"
-        changes only b, and a remains \"abc\". It turns out: a = abc, b = abcX.
-        This is why std::string is safe—the copy is truly separate—but also why
-        copying costs memory."}
+        {"type":"prediction","lang":"cpp","question":"std::string a = \"abc\"; std::string b = a; b += \"X\"; std::cout << a << \" \" << b; What will be printed?","options":["abcX abcX","abc abcX","abc abc","abcX abc"],"answer":1,"explanation":"The string b = a creates an INDEPENDENT copy of the contents of a, not a shared reference. Therefore, b += \"X\" changes only b, and a remains \"abc\". It turns out: a = abc, b = abcX. This is why std::string is safe—the copy is truly separate—but also why copying costs memory."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: process std::string without data loss or confusing position with length.
 
-        ```cpp
-
-        std::string message = "C++";
-
-        std::cout << message.size() << '\n';
-
-        ```**Why it's here:** `std::string` stores a sequence of characters and
-        `size()` returns the length.
-
-        **Please note:** Length in bytes and number of Unicode characters may
-        vary.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -1914,16 +2317,16 @@ topics:
       tags:
         - text
         - c++
-  - title: Directions and addresses
-    description: explain where the value lives and who is responsible for the
-      resource. recognize copying, sharing, and object lifetime.
+  - title: "Pointers and addresses"
+    description: "After this topic, learners can use addresses and check nullptr before dereferencing."
     order: 14
-    exerciseFocus: "a small example with a clear life time; verify a safe state
-      after an operation and not require manual memory inspection"
+    exerciseFocus: "Write a short program demonstrating “use addresses and check nullptr before dereferencing”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Directions and addresses
       content: |-
+
         ### Intuitive explanation
+
         Each variable **lives** somewhere in memory — in a cell with a certain number-address, like an apartment has a number in a house. Usually you work with the direction variable (`x = 10`) and don't think about the address. But sometimes you don't need the value itself, but **where it lies** - to pass that "somewhere" to other code. This is where the **pointer** comes in.
 
         A pointer is a variable that stores not a number but the **address** of another variable. Not the document itself, but a piece of paper with the inscription "closet 3, shelf 2". With this piece of paper, you can go to the address and read or **change** what's there.
@@ -1931,75 +2334,80 @@ topics:
         Two operators direct this dance. `&x` - "give me the **address** of the variable `x'" (take a piece of paper). `*p` - "go to the address in `p` and give what is there" is **disambiguation** (go for a piece of paper). Getting them mixed up is a common rookie mistake, so remember the directions: `&` packs the address, `*' unpacks it.
 
         ### What happens at runtime
+
         When you write `int* p = &x;`, `p` writes the address of the cell where `x` lives (something like `0x7ffe...`). Now `p` is "looking" at `x`. The expression `*p` follows this address and returns the value `x`. And `*p = 42` goes to the address and **overwrites** what is there, that is, it changes `x` itself, although you did not even mention its name.
 
         This is the power of pointers: to act on a variable **at a distance**, through its address. This is how functions change the "original", this is how dynamic structures (lists, trees) are built, this is how they communicate with low-level APIs.And this is the source of the worst C++ bugs. If the pointer is empty (`nullptr`) or points to a variable that is **already gone** (out of scope), dereferencing `*p` is a hike to a nonexistent address: **undefined behavior**, crash, or silent memory corruption. Therefore, the pointer must always either point to something alive, or be honestly equal to `nullptr`.
 
         ### Minimal code example
+
         ```cpp
         #include <iostream>
 
         int main() {
             int x = 10;
-            int* p = &x;        // p зберігає адресу x
+            int* p = &x;        // p stores the address of x
 
             std::cout << "x  = " << x << std::endl;
-            std::cout << "*p = " << *p << std::endl;   // значення за адресою
+            std::cout << "*p = " << *p << std::endl;   // the value at the address
 
-            *p = 42;            // змінюємо x ЧЕРЕЗ вказівник
-            std::cout << "після *p = 42, x = " << x << std::endl;
+            *p = 42;            // change x THROUGH the pointer
+            std::cout << "after *p = 42, x = " << x << std::endl;
             return 0;
         }
-        ```Output:
         ```
+
+        **Output:**
+        ```
+
         x  = 10
         *p = 10
-        після *p = 42, x = 42
+        after *p = 42, x = 42
         ```
 
         ### Explanation of each line of the example
+
         - `int* p = &x;` — `p` is a pointer to `int`; we put the **address** `x' (the `&' operator) into it.
         - `*p` in the output is denaming: we go by address and get `10`.
         - `*p = 42;` — we **write** 42 at the same address; it changes `x` itself.
         - The last line proves: `x` became `42`, although we did not write `x = ...` directly - the pointer did everything.
 
         ### Typical mistakes of a beginner
+
         1. **Dereference `nullptr`** - `*p` when `p` is empty: instant crash.
         2. **Confuse `*` in declaration and access** - in `int* p` the asterisk says "this is a pointer" and in `*p` it says "give value".
         3. **Point to dead variable** — return the address of a local variable that disappears after exiting the function (hanging pointer).
         4. **Forget to initialize** - an uninitialized `int* p;` contains a garbage address, and `*p` leads to "nowhere".
 
         ### How it looks in memory
+
         ```interactive
 
         {"type":"memory","caption":"int x = 10; int* p = &x;","stack":[{"name":"x","value":"10","id":"0x7ffe...a4"},{"name":"p","ref":"x","id":"0x7ffe...a8"}],"note":"p is a separate cell (at address 0x7ffe...a8) that stores not a number, but the address x (0x7ffe...a4). The arrow from p to x is 'points to'. Therefore, *p gives 10, and writing *p = 42 changes exactly cell x."}
+
         ```
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
-        ```cpp
-        std::string source = "data";
-        std::string target = std::move(source);
-        ```**Why it's here:** `std::move` allows you to move a resource instead of copying it. The old object is valid, but its value should not be assumed.
+        **Coding task.** Implement a short program or code snippet that demonstrates: use addresses and check nullptr before dereferencing.
 
-        **Please Note:** Once moved, the old value must be reassigned or destroyed.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
+
         You've looked under the hood of memory: every variable has an **address**, and a pointer is a variable that stores that address. The `&` operator takes an address, `*` denames (follows the address to the value), and through the pointer you can **change** another variable "at a distance". This is a powerful tool for dynamic structures and working with memory, but also a major source of crashes: dereferencing a `nullptr` or dangling pointer is undefined behavior. Next, you'll see the pointer's safer relative — **reference** — and the role of `const'.
       level: 2
       tags:
         - memory
         - c++
-  - title: Link and const
-    description: explain where the value lives and who is responsible for the
-      resource. recognize copying, sharing, and object lifetime.
+  - title: "References and const"
+    description: "After this topic, learners can use const and const references to protect data."
     order: 15
-    exerciseFocus: "a small example with a clear life time; verify a safe state
-      after an operation and not require manual memory inspection"
+    exerciseFocus: "Write a short program demonstrating “use const and const references to protect data”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Link and const
       content: >-
+
         ### Intuitive explanation
 
         A person often has several names: the passport name "Olexandr" and the
@@ -2044,24 +2452,40 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
 
+
         int main() {
+
             int score = 10;
-            int& alias = score;   // alias — інше ім'я тієї самої змінної
 
-            alias = 25;           // міняємо через псевдонім
-            std::cout << "score = " << score << std::endl;   // теж 25
+            int& alias = score;   // alias — another name for the same variable
 
-            const int& readOnly = score;   // читати можна, змінити — ні
+
+            alias = 25;           // change it through the alias
+
+            std::cout << "score = " << score << std::endl;   // also 25
+
+
+            const int& readOnly = score;   // readable, but not writable
+
             std::cout << "readOnly = " << readOnly << std::endl;
-            // readOnly = 99;  // <- не скомпілюється: const забороняє зміну
+
+            // readOnly = 99;  // <- does not compile: const forbids modification
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         score = 25
 
@@ -2070,68 +2494,70 @@ topics:
         ```
 
 
+
         ### Explanation of each line of the example
 
+
         - `int& alias = score;` — `alias` becomes the **second name** for
+
         `score`; a separate variable does not appear.
 
+
         - `alias = 25;` — we write through an alias, but the `score` itself
+
         changes.
+
 
         - `std::cout << score` — proves: `score` also became `25`.
 
+
         - `const int& readOnly = score;` is another alias, but **readonly**.
 
+
         - Commented out `readOnly = 99;` — if it was uncommented, the build
+
         would crash: `const` does not allow change.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Uninitialized reference** — `int& r;` does not compile: the
+
         reference must immediately bind to something.
 
+
         2. **Trying to change `const'** - the compiler will immediately stop
+
         (and that's a good thing).
 
+
         3. **Confuse `const int*` and `int* const`** - read from right to left
+
         to understand what exactly is frozen.
 
+
         4. **Pass a large object with a copy** instead of `const&` - waste time
+
         on unnecessary copying.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"int a = 5; int b = 10;
-        int& r = a; r = b; b = 20; std::cout << a << \" \" << b; What will be
-        printed?","options":["20 20","10 20","5 20","10
-        10"],"answer":1,"explanation":"r is an alias for a (binding is specified
-        once during creation). The line r = b does NOT bind r to b, but COPIES
-        the value of b (10) to what r points to, that is, to a. Now a = 10.
-        Next, b = 20 changes only b. Result: a = 10, b = 20. Key: The reference
-        cannot be redirected — r is forever named a."}
+        {"type":"prediction","lang":"cpp","question":"int a = 5; int b = 10; int& r = a; r = b; b = 20; std::cout << a << \" \" << b; What will be printed?","options":["20 20","10 20","5 20","10 10"],"answer":1,"explanation":"r is an alias for a (binding is specified once during creation). The line r = b does NOT bind r to b, but COPIES the value of b (10) to what r points to, that is, to a. Now a = 10. Next, b = 20 changes only b. Result: a = 10, b = 20. Key: The reference cannot be redirected — r is forever named a."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: use const and const references to protect data.
 
-        ```cpp
-
-        std::string source = "data";
-
-        std::string target = std::move(source);
-
-        ```**Why it's here:** `std::move` allows you to move a resource instead
-        of copying it. The old object is valid, but its value should not be
-        assumed.
-
-        **Please Note:** Once moved, the old value must be reassigned or
-        destroyed.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -2146,14 +2572,13 @@ topics:
         - memory
         - c++
   - title: Structures and simple data types
-    description: recognize basic C++ constructs in code. explain how the value
-      changes at runtime.
+    description: "After this topic, learners can initialize structure fields and use it as a data record."
     order: 16
-    exerciseFocus: "one main topic operation; simple input or fixed example, no
-      unexplored libraries"
+    exerciseFocus: "Write a short program demonstrating “initialize structure fields and use it as a data record”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Structures and simple data types
       content: >-
+
         ### Intuitive explanation
 
         Imagine that you are describing a book in a program. Name is
@@ -2194,83 +2619,118 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
+
 
         #include <string>
 
+
         struct Book {
+
             std::string title;
+
             int year = 0;
+
             double price = 0.0;
+
         };
 
-        int main() {
-            Book b{"Пригоди Тома", 1876, 149.50};
-            std::cout << b.title << " (" << b.year << ") — " << b.price << " грн" << std::endl;
 
-            b.price = 99.90;                 // міняємо одне поле
+        int main() {
+
+            Book b{"Tom's Adventures", 1876, 149.50};
+
+            std::cout << b.title << " (" << b.year << ") — " << b.price << " UAH" << std::endl;
+
+
+            b.price = 99.90;                 // change one field
+
             Book* ptr = &b;
-            std::cout << "Зі знижкою: " << ptr->price << " грн" << std::endl;
+
+            std::cout << "Discounted: " << ptr->price << " UAH" << std::endl;
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
 
-        Пригоди Тома (1876) — 149.5 грн
+        **Output:**
 
-        Зі знижкою: 99.9 грн
 
         ```
+
+
+        Tom's Adventures (1876) — 149.5 UAH
+
+        Discounted: 99.9 UAH
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `struct Book { ... };` — we declare a new type with three fields; note
+
         the `;` at the end.
 
+
         - `int year = 0;` is a field with a default value: if not specified, it
+
         will be `0`.
 
+
         - `Book b{"The Adventures of Tom", 1876, 149.50};` — we create an object
+
         by filling in the fields in order.
 
+
         - `b.price = 99.90;` — access to the field through **dot** (we have the
+
         object itself).
 
+
         - `ptr->price' — access via **arrow**, because `ptr' is a pointer to
+
         `Book'.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Forget the `;` after the `}`** structure — the compiler will throw
+
         an incomprehensible error elsewhere.
 
+
         2. **Confuse `.` and `->`** - a dot for an object, an arrow for a
+
         pointer.
 
+
         3. **Do not initialize fields** - Without default values, numeric fields
+
         contain garbage.
 
+
         4. **Shuffle the order** in `Book{...}` - the fields are filled exactly
+
         in the order of the announcement.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"struct P { int x = 1; int
-        y = 2; }; Pa; P b = a; b.x = 99; std::cout << a.x << \" \" << b.x; What
-        will be printed?","options":["99 99","1 99","1 1","99
-        1"],"answer":1,"explanation":"P b = a copies all fields of a to a new
-        independent object b (this is a copy of values, not a shared reference).
-        Therefore, b.x = 99 changes only b, and a.x remains 1. Result: 1 99.
-        Structures are copied field by field - each object has its own data
-        set."}
+        {"type":"prediction","lang":"cpp","question":"struct P { int x = 1; int y = 2; }; Pa; P b = a; b.x = 99; std::cout << a.x << \" \" << b.x; What will be printed?","options":["99 99","1 99","1 1","99 1"],"answer":1,"explanation":"P b = a copies all fields of a to a new independent object b (this is a copy of values, not a shared reference). Therefore, b.x = 99 changes only b, and a.x remains 1. Result: 1 99. Structures are copied field by field - each object has its own data set."}
 
         ```
+
 
 
         ### In practice
@@ -2279,39 +2739,61 @@ topics:
 
         ```cpp
 
+
         struct Point {
+
             int x;
+
             int y;
+
         };
 
-        ```**Why it's here:** `struct` combines related fields into a single
+
+        ```
+
+        **Why it's here:** `struct` combines related fields into a single
+
         type.
+
 
         **Note:** If access rules and invariants are required, consider a class.
 
+
+        **Coding task.** Implement a short program or code snippet that demonstrates: initialize structure fields and use it as a data record.
+
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
 
+
         You learned how to glue together multiple values into a single custom
+
         type using `struct`: fields are stored together, accessed via a dot (for
+
         an object) or an arrow (for a pointer), and copying creates an
+
         independent object with its own fields. Don't forget the `;` after the
+
         declaration and the default value. Structs are "packages of data" and at
+
         the same time the first step in object-oriented programming: add methods
+
         and obfuscation to the fields, and the `struct' becomes a full-fledged
+
         **class**, which you move on to.
       level: 2
       tags:
         - foundations
         - c++
   - title: Classes and encapsulation
-    description: describe the responsibility of the type or object in simple terms.
-      distinguish composition, imitation and polymorphic behavior.
+    description: "After this topic, learners can encapsulate class state and preserve its invariant through methods."
     order: 17
-    exerciseFocus: "one object interaction or behavior choice; do not add frameworks
-      and unnecessary boilerplate"
+    exerciseFocus: "Write a short program demonstrating “encapsulate class state and preserve its invariant through methods”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Classes and encapsulation
       content: >-
+
         ### Intuitive explanation
 
         A `struct` is a ``data packet'' where all fields are open: anyone can
@@ -2355,121 +2837,153 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
+
 
         class BankAccount {
 
+
         private:
-            long balance = 0;               // прихований стан
+
+            long balance = 0;               // hidden state
+
 
         public:
+
             void deposit(long amount) {
+
                 if (amount > 0) balance += amount;
+
             }
+
             bool withdraw(long amount) {
+
                 if (amount > 0 && amount <= balance) {
+
                     balance -= amount;
+
                     return true;
+
                 }
-                return false;               // не даємо піти в мінус
+
+                return false;               // prevent a negative balance
+
             }
+
             long getBalance() const { return balance; }
+
         };
 
+
         int main() {
+
             BankAccount acc;
+
             acc.deposit(1000);
+
             acc.withdraw(300);
-            bool ok = acc.withdraw(5000);   // забагато -> відхилено
-            std::cout << "Баланс: " << acc.getBalance() << std::endl;
-            std::cout << "Зняття 5000 успішне? " << ok << std::endl;
+
+            bool ok = acc.withdraw(5000);   // too much -> rejected
+
+            std::cout << "Balance: " << acc.getBalance() << std::endl;
+
+            std::cout << "Was the 5000 withdrawal successful? " << ok << std::endl;
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
 
-        Баланс: 700
+        **Output:**
 
-        Зняття 5000 успішне? 0
 
         ```
+
+
+        Balance: 700
+
+        Was the 5000 withdrawal successful? 0
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `private: long balance = 0;` — state under armor; externally
+
         `acc.balance` does not compile.
 
+
         - `void deposit(long amount)` — the "deposit" door; the `if (amount >
+
         0)` rule does not allow negative sums.
 
+
         - `bool withdraw(long amount)' — "remove" the door; returns `false` if
+
         there is not enough money (so 5000 is rejected).
 
+
         - `long getBalance() const` — "look" door; `const` ensures that the
+
         method is read-only.
+
 
         - Summary
 
 
+
         : `1000 − 300 = 700`, and the withdrawal of 5000 is rejected — the
+
         object protected itself.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Make the entire state `public'** — then there is no encapsulation,
+
         and it's just a `struct'.
 
+
         2. **Forgetting a `;` after a `}`** class is an obscure compilation
+
         error.
 
+
         3. **Do not mark reading methods `const'** — and lose the guarantee "I
+
         will not change".
 
+
         4. **Write getters/setters for everything in a row** — if the setter
+
         simply assigns without checks, the field could be left open; the power
+
         is in the **rules** within the methods.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"BankAccount has a private
-        long balance. What will happen to the row acc.balance = 1000000; in
-        main?","options":["The balance will be a million","Compilation error:
-        balance is private","Quietly ignored","Crash on
-        startup"],"answer":1,"explanation":"balance is declared private, so it
-        cannot be accessed from outside the class. The compiler will stop the
-        build with an unavailable member error - before it even starts. This is
-        the essence of encapsulation: the balance can be changed only through
-        controlled public methods (deposit/withdraw), which monitor
-        correctness."}
+        {"type":"prediction","lang":"cpp","question":"BankAccount has a private long balance. What will happen to the row acc.balance = 1000000; in main?","options":["The balance will be a million","Compilation error: balance is private","Quietly ignored","Crash on startup"],"answer":1,"explanation":"balance is declared private, so it cannot be accessed from outside the class. The compiler will stop the build with an unavailable member error - before it even starts. This is the essence of encapsulation: the balance can be changed only through controlled public methods (deposit/withdraw), which monitor correctness."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: encapsulate class state and preserve its invariant through methods.
 
-        ```cpp
-
-        class Lamp {
-
-        public:
-            explicit Lamp(bool isOn) : isOn_(isOn) {}
-        private:
-            bool isOn_;
-        };
-
-        ```**Why it's here:** A class combines state and the rules for its
-        creation. The initialization list sets the field before the execution of
-        the constructor body.
-
-        **Note:** Resource ownership and lifetime must be obvious.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -2485,15 +2999,15 @@ topics:
         - objects
         - c++
   - title: Constructors and destructors
-    description: explain the main idea of ​​the topic in your own words. read a
-      short example and predict its outcome.
+    description: "After this topic, learners can initialize an object with a constructor and determine destruction order."
     order: 18
-    exerciseFocus: "one key idea of ​​C++ with short deterministic stdout and
-      boundary case checking"
+    exerciseFocus: "Write a short program demonstrating “initialize an object with a constructor and determine destruction order”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Constructors and destructors
       content: |
+
         ### Intuitive explanation
+
         Each object has two important moments of life: **birth** and **death**. It's bad when an object is born "half-empty" - with fields full of garbage that still need to be manually filled (and easily forgotten). And it's bad when dirt remains after his death - unclosed files, unreleased memory.
 
         C++ provides two special methods for this. **Constructor** (`Timer(...)`) is a "birth ceremony": it is called **automatically** at the moment of object creation and ensures that it is immediately in a valid, ready state. **Destructor** (`~Timer()`) - "Farewell Ceremony": Called **automatically** when an object dies to clean up after itself.
@@ -2501,11 +3015,13 @@ topics:
         An analogy is renting a room in a hotel. Check-in (designer): you are given a key, a room is prepared. Eviction (destructor): you hand over the key, the staff cleans. The best thing is that you **don't have to remember** to check out manually - as soon as you leave the room (the object goes out of view), the cleaning starts automatically.
 
         ### What happens at runtime
+
         The constructor works on creation. Often with it you see an **initialization list** - `: name(n)` after the parentheses: this is the most correct way to specify the fields, **before** entering the constructor body.
 
         The destructor works on destruction, and this moment is clearly defined: for an object on the stack — when the execution **leaves the block** `{ ... }` where it was declared. Moreover, in the **reverse** order of creation: who was born last, dies first (like plates in a stack - you remove them from the top). This can be seen in the conclusion of the example: ``internal'' was created after ``external'' and was destroyed earlier.It is this **automaticity and predictability** that makes destructors the cornerstone of resource management in C++ (the RAII principle, next topic). One important caveat in advance: if the class is intended to be inherited and managed via a base pointer, its destructor must be `virtual' - otherwise `delete' will call the wrong destructor and the child's resources will leak.
 
         ### Minimal code example
+
         ```cpp
         #include <iostream>
         #include <string>
@@ -2513,36 +3029,40 @@ topics:
         class Timer {
             std::string name;
         public:
-            Timer(const std::string& n) : name(n) {          // конструктор
-                std::cout << "[" << name << "] старт" << std::endl;
+            Timer(const std::string& n) : name(n) {          // constructor
+                std::cout << "[" << name << "] start" << std::endl;
             }
-            ~Timer() {                                        // деструктор
-                std::cout << "[" << name << "] стоп" << std::endl;
+            ~Timer() {                                        // destructor
+                std::cout << "[" << name << "] stop" << std::endl;
             }
         };
 
         int main() {
-            std::cout << "-- заходимо в main --" << std::endl;
-            Timer outer("зовнішній");
+            std::cout << "-- entering main --" << std::endl;
+            Timer outer("external");
             {
-                Timer inner("внутрішній");
-                std::cout << "-- усередині блоку --" << std::endl;
-            }   // тут inner знищується
-            std::cout << "-- кінець main --" << std::endl;
+                Timer inner("internal");
+                std::cout << "-- inside the block --" << std::endl;
+            }   // inner is destroyed here
+            std::cout << "-- end of main --" << std::endl;
             return 0;
-        }   // тут outer знищується
-        ```Output:
+        }   // outer is destroyed here
         ```
-        -- заходимо в main --
-        [зовнішній] старт
-        [внутрішній] старт
-        -- усередині блоку --
-        [внутрішній] стоп
-        -- кінець main --
-        [зовнішній] стоп
+
+        **Output:**
+        ```
+
+        -- entering main --
+        [external] start
+        [internal] start
+        -- inside the block --
+        [internal] stop
+        -- end of main --
+        [external] stop
         ```
 
         ### Explanation of each line of the example
+
         - `Timer(const std::string& n) : name(n)` is a constructor; `: name(n)` is the initialization list of the `name` field.
         - `~Timer()` is a destructor; class name with `~` in front, no parameters.
         - `Timer outer("external");` - the `outer` constructor is activated immediately, automatically.
@@ -2550,48 +3070,50 @@ topics:
         - `outer` dies last, on `}` of the `main` function - note the **reverse** order of destruction.
 
         ### Typical mistakes of a beginner
+
         1. **Call the destructor manually** — no need, it will trigger itself; a manual challenge will result in double destruction.
         2. **Forget the `virtual`-destructor** in the base class, which is managed through a pointer - a descendant resource leak.
         3. **Do heavy work in the constructor without error handling** — if the constructor throws an exception, the object is considered never created.
-        4. **Confuse Order** - Fields are initialized in **declaration** order in the class, not in the order in the initialization list.{"type":"trace","lang":"cpp","caption":"The order of birth and death of objects","code":["Timer outer(\"outer\");","{"," Timer inner(\"inner\");","}","// next is the end of main"],"steps":[{"line":1,"vars":{"outer":"alive"},"out":"[outer] start","note":"constructor outer"},{"line":3,"vars":{"outer":"alive","inner":"alive"},"out":"[inner] start","note":"constructor inner"},{"line":4,"vars":{"outer":"alive","inner":"destroyed"},"out":"[inner] stop","note":"out of block - destructor inner (last born - first died)"},{"line":5,"vars":{"outer":"destroyed"},"out":"[outer] stop","note":"the end of main is the destructor of outer"}]}
+        4. **Confuse Order** - Fields are initialized in **declaration** order in the class, not in the order in the initialization list.
+
+        ```interactive
+
+        {"type":"trace","lang":"cpp","caption":"The order of birth and death of objects","code":["Timer outer(\"outer\");","{"," Timer inner(\"inner\");","}","// next is the end of main"],"steps":[{"line":1,"vars":{"outer":"alive"},"out":"[outer] start","note":"constructor outer"},{"line":3,"vars":{"outer":"alive","inner":"alive"},"out":"[inner] start","note":"constructor inner"},{"line":4,"vars":{"outer":"alive","inner":"destroyed"},"out":"[inner] stop","note":"out of block - destructor inner (last born - first died)"},{"line":5,"vars":{"outer":"destroyed"},"out":"[outer] stop","note":"the end of main is the destructor of outer"}]}
+
         ```
 
         ### In practice
 
-        A small fragment to understand the idea of the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: initialize an object with a constructor and determine destruction order.
 
-        ```cpp
-        class Lamp {
-        public:
-            explicit Lamp(bool isOn) : isOn_(isOn) {}
-        private:
-            bool isOn_;
-        };
-        ```**Why it's here:** A class combines state and the rules for its creation. The initialization list sets the field before the execution of the constructor body.
-
-        **Note:** Resource ownership and lifetime must be obvious.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
+
         You've seen the life cycle of an object: a **constructor** spawns it in a valid state (often via a `: field(value)` initialization list), and a **destructor** `~Class()` automatically cleans up resources on destruction. Both are self-inflicted, at distinct moments, with destruction proceeding in **reverse** to the creation of order. This automaticity is the foundation of resource management in C++, which the next topic will formalize into the **RAII** principle.
+
         ### Interactive self-check
+
         First make a prediction in words, then check it with the answer. If you make a mistake, go back to the example and find the line that changes the result.
+
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"What is the main idea behind Constructors and Destructors?","options":["The execution conforms to the described contract of the theme","The program always ignores this construct","The result depends only on the variable name"],"answer":0,"explanation":"The correct prediction relies on the input, the operation, and the result described in the topic."}
+        {"type":"prediction","lang":"cpp","question":"In what order does C++ initialize a class’s data members?","options":["In the order they are declared in the class","In the order written in the member-initializer list","In reverse declaration order"],"answer":0,"explanation":"C++ initializes members in class declaration order, regardless of the initializer-list order. They are destroyed in reverse order."}
+
         ```
+
       level: 2
       tags:
         - practice
         - c++
   - title: RAII and resource management
-    description: decompose the algorithm into successive checks or steps. explain
-      why this particular branch or iteration is being executed.
+    description: "After this topic, learners can apply RAII to guarantee resource release after an exception."
     order: 19
-    exerciseFocus: "one selection/repeat logic; be sure to add the empty, minimal,
-      and limiting case"
+    exerciseFocus: "Write a short program demonstrating “apply RAII to guarantee resource release after an exception”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: RAII and resource management
       content: >-
+
         ### Intuitive explanation
 
         In other languages, memory is cleaned by a "garbage collector" who will
@@ -2640,120 +3162,154 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
+
 
         #include <stdexcept>
 
+
         #include <string>
 
+
         class Door {
+
             std::string room;
+
         public:
+
             Door(const std::string& r) : room(r) {
-                std::cout << "Відчинили двері: " << room << std::endl;
+
+                std::cout << "Door opened: " << room << std::endl;
+
             }
+
             ~Door() {
-                std::cout << "Зачинили двері: " << room << std::endl;
+
+                std::cout << "Door closed: " << room << std::endl;
+
             }
+
         };
 
+
         void work() {
-            Door d("склад");
-            std::cout << "Працюємо на складі..." << std::endl;
-            throw std::runtime_error("аварія!");   // раптова помилка
+
+            Door d("warehouse");
+
+            std::cout << "Working in the warehouse..." << std::endl;
+
+            throw std::runtime_error("failure!");   // unexpected error
+
         }
+
 
         int main() {
+
             try {
+
                 work();
+
             } catch (const std::exception& e) {
-                std::cout << "Спіймали: " << e.what() << std::endl;
+
+                std::cout << "Caught: " << e.what() << std::endl;
+
             }
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
 
-        Відчинили двері: склад
+        **Output:**
 
-        Працюємо на складі...
-
-        Зачинили двері: склад
-
-        Спіймали: аварія!
 
         ```
+
+
+        Door opened: warehouse
+
+        Working in the warehouse...
+
+        Door closed: warehouse
+
+        Caught: failure!
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `Door(const std::string& r)` — the constructor **grabs** the resource
+
         (conditionally "opens the door").
 
+
         - `~Door()` — the destructor **releases** the resource ("closes the
+
         door").
 
+
         - `throw std::runtime_error(...)` — an exception is thrown in the middle
+
         of `work()`; the normal code after it will not be executed.
 
+
         - But in the output "Closed the door" stands **before** "Caught" - the
+
         `d` destructor was fired during stack unwinding, before the exception
+
         was passed to `catch`.
 
+
         - Conclusion: the resource is freed even in the event of an accident -
+
         we did not write any "manual cleaning".
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Write manual `new`/`delete`** where there is a ready-made RAII
+
         wrapper (`vector`, `unique_ptr`).
 
+
         2. **Put the release at the end of the function** — an exception or an
+
         early ``return'' will not reach it.
 
+
         3. **Keep a "raw" pointer** to a resource instead of a smart one — and
+
         take over manual cleanup.
 
+
         4. **Ignore RAII for files and locks** - Forgotten `unlock()`/`close()`
+
         is also a leak.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"In the work() function, a
-        local Door d is created, after which an exception is thrown. Will
-        \"Closed the door\" be released and when?","options":["No, the exception
-        is thrown by the destructor","Yes - before the exception is caught in
-        catch","Yes — but already after exiting the program","Only if you call
-        delete manually"],"answer":1,"explanation":"When an exception is thrown,
-        C++ unrolls the stack and calls the destructors of all local objects
-        along the way. That's why ~Door() works even during promotion - \"Closed
-        the door\" is printed before \"Caught\". This is the essence of RAII:
-        the resource is released guaranteed, even with exceptions, without any
-        manual code."}
+        {"type":"prediction","lang":"cpp","question":"In the work() function, a local Door d is created, after which an exception is thrown. Will \"Closed the door\" be released and when?","options":["No, the exception is thrown by the destructor","Yes - before the exception is caught in catch","Yes — but already after exiting the program","Only if you call delete manually"],"answer":1,"explanation":"When an exception is thrown, C++ unrolls the stack and calls the destructors of all local objects along the way. That's why ~Door() works even during promotion - \"Closed the door\" is printed before \"Caught\". This is the essence of RAII: the resource is released guaranteed, even with exceptions, without any manual code."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: apply RAII to guarantee resource release after an exception.
 
-        ```cpp
-
-        if (score >= 60) {
-            result = "зараховано";
-        } else {
-            result = "ще раз";
-        }
-
-        ```**Why it's here:** A condition defines an execution block.
-
-        **Note:** Do not leave the result uninitialized.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -2771,14 +3327,13 @@ topics:
         - control
         - c++
   - title: Operator overload
-    description: recognize basic C++ constructs in code. explain how the value
-      changes at runtime.
+    description: "After this topic, learners can overload an operator for a natural operation while preserving type semantics."
     order: 20
-    exerciseFocus: "one main topic operation; simple input or fixed example, no
-      unexplored libraries"
+    exerciseFocus: "Write a short program demonstrating “overload an operator for a natural operation while preserving type semantics”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Operator overload
       content: >-
+
         ### Intuitive explanation
 
         For numbers, you write `a + b' - short and clear. But for the own type
@@ -2816,35 +3371,60 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
 
+
         struct Vec2 {
+
             int x, y;
+
         };
 
-        Vec2 operator+(const Vec2& a, const Vec2& b) {   // додавання векторів
+
+        Vec2 operator+(const Vec2& a, const Vec2& b) {   // vector addition
+
             return {a.x + b.x, a.y + b.y};
+
         }
 
-        bool operator==(const Vec2& a, const Vec2& b) {  // порівняння
+
+        bool operator==(const Vec2& a, const Vec2& b) {  // comparison
+
             return a.x == b.x && a.y == b.y;
+
         }
 
-        std::ostream& operator<<(std::ostream& os, const Vec2& v) {  // вивід
+
+        std::ostream& operator<<(std::ostream& os, const Vec2& v) {  // output
+
             return os << "(" << v.x << ", " << v.y << ")";
+
         }
+
 
         int main() {
+
             Vec2 a{1, 2};
+
             Vec2 b{3, 4};
+
             std::cout << a << " + " << b << " = " << (a + b) << std::endl;
+
             std::cout << "a == b? " << (a == b) << std::endl;
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         (1, 2) + (3, 4) = (4, 6)
 
@@ -2853,51 +3433,67 @@ topics:
         ```
 
 
+
         ### Explanation of each line of the example
 
+
         - `operator+(const Vec2& a, const Vec2& b)` — we teach `+` to add
+
         vectors component by component; return **new** `Vec2`.
 
+
         - `operator==(...)` — `a == b` is true only when **both** coordinates
+
         match; here `(1,2)` ≠ `(3,4)`, therefore `0`.
 
+
         - `operator<<(std::ostream& os, const Vec2& v)` — we teach `cout` to
+
         output a vector as `(x, y)`.
 
+
         - `return os << ...` — we return the thread, so `<<` calls are linked
+
         into one line.
 
+
         - `a + b` gives `(4, 6)` - exactly what you would expect from vector
+
         addition.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Non-intuitive semantics** — `+', which does not add up; the reader
+
         will be shocked.
 
+
         2. **Accept parameters by copy** instead of `const&` — redundant copies
+
         and risk of accidental change.
 
+
         3. **Change operands in arithmetic** — `+` should return a new object,
+
         not corrupt `a`.
 
+
         4. **Forget to return the stream** with `operator<<` — and break the
+
         coupling of `cout << a << b`.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"For Vec2, operator+ is
-        defined, which returns {a.x+b.x, a.y+b.y}. What will operator<< print
-        for the expression Vec2{2,5} + Vec2{10,0}?","options":["(12, 5)","(2,
-        5)","(10, 0)","(12, 0)"],"answer":0,"explanation":"operator+ adds
-        componentwise: x = 2+10 = 12, y = 5+0 = 5. The result is a new Vec2{12,
-        5}, which operator<< outputs as (12, 5). The input vectors are not
-        changed—the arithmetic operator just returns a new object."}
+        {"type":"prediction","lang":"cpp","question":"For Vec2, operator+ is defined, which returns {a.x+b.x, a.y+b.y}. What will operator<< print for the expression Vec2{2,5} + Vec2{10,0}?","options":["(12, 5)","(2, 5)","(10, 0)","(12, 0)"],"answer":0,"explanation":"operator+ adds componentwise: x = 2+10 = 12, y = 5+0 = 5. The result is a new Vec2{12, 5}, which operator<< outputs as (12, 5). The input vectors are not changed—the arithmetic operator just returns a new object."}
 
         ```
+
 
 
         ### In practice
@@ -2906,37 +3502,57 @@ topics:
 
         ```cpp
 
+
         Complex operator+(const Complex& other) const;
 
-        ```**Why it's here:** Overloading gives the familiar operator
+
+        ```
+
+        **Why it's here:** Overloading gives the familiar operator
+
         self-explanatory behavior for its own type.
 
+
         **Note:** The operator must behave as expected and maintain symmetry
+
         where required.
+
+
+        **Coding task.** Implement a short program or code snippet that demonstrates: overload an operator for a natural operation while preserving type semantics.
+
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
+
         You learned how to overload operators - to give your own types the signs
+
         `+`, `==`, `<<` so that the code reads as naturally as for built-in
+
         types. Under the hood, an operator is a function with a special name:
+
         parameters take `const&`, arithmetic returns a new object, and
+
         `operator<<` returns a stream reference for coupling. The rule of thumb
+
         is **expected semantics**: overload only where the sign is obvious.
+
         Next, you will teach the classes to imitate each other's behavior
+
         through imitation.
       level: 3
       tags:
         - foundations
         - c++
-  - title: Imitation
-    description: describe the responsibility of the type or object in simple terms.
-      distinguish composition, imitation and polymorphic behavior.
+  - title: "Inheritance"
+    description: "After this topic, learners can extend a base class and determine inherited behavior."
     order: 21
-    exerciseFocus: "one object interaction or behavior choice; do not add frameworks
-      and unnecessary boilerplate"
+    exerciseFocus: "Write a short program demonstrating “extend a base class and determine inherited behavior”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Imitation
       content: >-
+
         ### Intuitive explanation
 
         Imagine you are describing a dog, a cat, and a parrot. Everyone has a
@@ -2981,109 +3597,131 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
+
 
         #include <string>
 
+
         class Animal {
 
+
         public:
+
             std::string name;
+
             Animal(const std::string& n) : name(n) {}
-            void eat() { std::cout << name << " їсть" << std::endl; }
+
+            void eat() { std::cout << name << " eats" << std::endl; }
+
         };
+
 
         class Dog : public Animal {
 
+
         public:
-            Dog(const std::string& n) : Animal(n) {}   // виклик конструктора базового
-            void bark() { std::cout << name << " каже: Гав!" << std::endl; }
+
+            Dog(const std::string& n) : Animal(n) {}   // call the base constructor
+
+            void bark() { std::cout << name << " says: Woof!" << std::endl; }
+
         };
 
+
         int main() {
-            Dog rex("Рекс");
-            rex.eat();    // успадкований метод
-            rex.bark();   // власний метод
+
+            Dog rex("Rex");
+
+            rex.eat();    // inherited method
+
+            rex.bark();   // own method
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
 
-        Рекс їсть
+        **Output:**
 
-        Рекс каже: Гав!
 
         ```
+
+
+        Rex eats
+
+        Rex says: Woof!
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `class Dog : public Animal` — `Dog` inherits `Animal` as ``is a
+
         species''.
 
+
         - `Dog(const std::string& n) : Animal(n)' — the `Animal' part is
+
         constructed first (initializes `name').
 
+
         - `rex.eat()` - method **not** declared in `Dog`, but available:
+
         inherited from `Animal`.
+
 
         - `rex.bark()` — own method `Dog`; ``Animal'' does not have it.
 
+
         - `name` in `bark()` is the same inherited field; the descendant uses it
+
         as his own.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Forgetting to call the constructor of the base** — if the base does
+
         not have a constructor without parameters, it is a compilation error.
 
+
         2. **Omit `public`** in `: Animal` - by default `class` inherits
+
         `private`, and ``is Animal'' from outside disappears.
 
+
         3. **Imitate for the sake of code reuse** where it actually "has" and
+
         not "is" - take the composition.
+
 
         4. **Building too deep hierarchies** is fragile and difficult to change.
 
+
         ### Try to predict
+
 
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"Dog inherits from Animal
-        (which has an eat method) and adds bark. What happens when Animal calls
-        a(\"Mouse\"); a.bark(); ?","options":["Prints a bark","Compilation
-        error: Animal does not have bark","Nothing will happen","Will call eat
-        instead of bark"],"answer":1,"explanation":"Imitation is unidirectional:
-        Dog gets everything from Animal, but NOT the other way around. bark() is
-        defined only in Dog, so an object of the base type Animal does not have
-        one. A call to a.bark() does not compile. The base class knows nothing
-        about its descendants."}
+        {"type":"prediction","lang":"cpp","question":"Dog inherits from Animal (which has an eat method) and adds bark. What happens when Animal calls a(\"Mouse\"); a.bark(); ?","options":["Prints a bark","Compilation error: Animal does not have bark","Nothing will happen","Will call eat instead of bark"],"answer":1,"explanation":"Imitation is unidirectional: Dog gets everything from Animal, but NOT the other way around. bark() is defined only in Dog, so an object of the base type Animal does not have one. A call to a.bark() does not compile. The base class knows nothing about its descendants."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: extend a base class and determine inherited behavior.
 
-        ```cpp
-
-        class Lamp {
-
-        public:
-            explicit Lamp(bool isOn) : isOn_(isOn) {}
-        private:
-            bool isOn_;
-        };
-
-        ```**Why it's here:** A class combines state and the rules for its
-        creation. The initialization list sets the field before the execution of
-        the constructor body.
-
-        **Note:** Resource ownership and lifetime must be obvious.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -3100,14 +3738,13 @@ topics:
         - objects
         - c++
   - title: Polymorphism and virtual
-    description: describe the responsibility of the type or object in simple terms.
-      distinguish composition, imitation and polymorphic behavior.
+    description: "After this topic, learners can call a virtual method through a base type and safely delete a derived object."
     order: 22
-    exerciseFocus: "one object interaction or behavior choice; do not add frameworks
-      and unnecessary boilerplate"
+    exerciseFocus: "Write a short program demonstrating “call a virtual method through a base type and safely delete a derived object”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Polymorphism and virtual
       content: >-
+
         ### Intuitive explanation
 
         Imagine that you have a list of different shapes - circles, squares,
@@ -3152,121 +3789,157 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
+
 
         #include <memory>
 
+
         #include <vector>
+
 
         class Shape {
 
+
         public:
+
             virtual double area() const { return 0; }
-            virtual ~Shape() = default;              // віртуальний деструктор
+
+            virtual ~Shape() = default;              // virtual destructor
+
         };
+
 
         class Circle : public Shape {
+
             double r;
+
         public:
+
             Circle(double radius) : r(radius) {}
+
             double area() const override { return 3.14159 * r * r; }
+
         };
+
 
         class Square : public Shape {
+
             double side;
+
         public:
+
             Square(double s) : side(s) {}
+
             double area() const override { return side * side; }
+
         };
 
+
         int main() {
+
             std::vector<std::unique_ptr<Shape>> shapes;
+
             shapes.push_back(std::make_unique<Circle>(2.0));
+
             shapes.push_back(std::make_unique<Square>(3.0));
 
+
             for (const auto& s : shapes) {
-                std::cout << "Площа: " << s->area() << std::endl;   // за реальним типом
+
+                std::cout << "Area: " << s->area() << std::endl;   // based on the runtime type
+
             }
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
 
-        Площа: 12.5664
+        **Output:**
 
-        Площа: 9
 
         ```
+
+
+        Area: 12.5664
+
+        Area: 9
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `virtual double area() const` — declare the method virtual:
+
         descendants will be able to override it.
 
+
         - `virtual ~Shape() = default;` is a virtual destructor so that `delete`
+
         via `Shape*` removes the descendant completely.
 
+
         - `double area() const override` — `Circle`/`Square` give their own
+
         formula; `override' checks for correctness.
 
+
         - `std::vector<std::unique_ptr<Shape>>` — store **different** shapes
+
         under a common base type.
 
+
         - `s->area()` - the same call gives `12.5664` for a circle and `9` for a
+
         square: the real object method is chosen.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Forget `virtual`** in the base method - the call will always go to
+
         the version of the base class (early binding).
 
+
         2. **Non-virtual destructor** of the base class — leakage of the
+
         descendant part during `delete' through the base pointer.
 
+
         3. **Omit the `override'** — and don't notice that due to the typos in
+
         the signature, you've created a new method, not overridden it.
 
+
         4. **Call the virtual method in the constructor** — during construction,
+
         there is no descendant yet, so the base version will be selected.
+
 
         ### Which method will be executed?
 
+
         ```interactive
 
-
-        {"type":"dispatch","call":"s->area()","cases":[{"type":"Circle
-        (r=2)","result":"Circle::area() → 12.5664"},{"type":"Square
-        (side=3)","result":"Square::area() → 9"}],"note":"The pointer type is
-        Shape*, but thanks to virtual the call selects the method of the REAL
-        object via vtable (late binding). Therefore, the same line s->area()
-        gives different formulas for a circle and a square. Without virtual,
-        Shape::area() would be called both times and return 0."}
+        {"type":"dispatch","call":"s->area()","cases":[{"type":"Circle (r=2)","result":"Circle::area() → 12.5664"},{"type":"Square (side=3)","result":"Square::area() → 9"}],"note":"The pointer type is Shape*, but thanks to virtual the call selects the method of the REAL object via vtable (late binding). Therefore, the same line s->area() gives different formulas for a circle and a square. Without virtual, Shape::area() would be called both times and return 0."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: call a virtual method through a base type and safely delete a derived object.
 
-        ```cpp
-
-        class Lamp {
-
-        public:
-            explicit Lamp(bool isOn) : isOn_(isOn) {}
-        private:
-            bool isOn_;
-        };
-
-        ```**Why it's here:** A class combines state and the rules for its
-        creation. The initialization list sets the field before the execution of
-        the constructor body.
-
-        **Note:** Resource ownership and lifetime must be obvious.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -3284,14 +3957,13 @@ topics:
         - objects
         - c++
   - title: Templates
-    description: extract repetitive logic into a comprehensible abstraction. explain
-      data flow through parameters, return, or iteration.
+    description: "After this topic, learners can parameterize a function or class with a template and deduce its type."
     order: 23
-    exerciseFocus: "one script with a clear value stream; not to require individual
-      unit tests instead of a complete program"
+    exerciseFocus: "Write a short program demonstrating “parameterize a function or class with a template and deduce its type”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Templates
       content: >-
+
         ### Intuitive explanation
 
         Imagine you wrote a `maxOf` function that returns the greater of two
@@ -3335,85 +4007,120 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
+
 
         #include <string>
 
+
         template <typename T>
 
-        T maxOf(T a, T b) {              // працює для будь-якого типу з
-        операцією >
+
+        T maxOf(T a, T b) {              // works for any type that supports
+
+        that supports >
+
             return (a > b) ? a : b;
+
         }
+
 
         int main() {
+
             std::cout << maxOf(3, 7) << std::endl;              // T = int
+
             std::cout << maxOf(2.5, 1.5) << std::endl;          // T = double
-            std::cout << maxOf(std::string("яблуко"),
-                               std::string("банан")) << std::endl;  // T = std::string
+
+            std::cout << maxOf(std::string("apple"),
+
+                               std::string("banana")) << std::endl;  // T = std::string
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
+
+        **Output:**
+
+
+        ```
+
 
         7
 
         2.5
 
-        яблуко
+        apple
 
         ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `template <typename T>` — we declare that the template with ``empty
+
         space'' `T` follows.
 
+
         - `T maxOf(T a, T b)' — both the parameters and the result have the same
+
         type `T', which will be determined when called.
 
+
         - `maxOf(3, 7)` — the compiler outputs `T = int`, generates an int
+
         version, returns `7`.
 
+
         - `maxOf(2.5, 1.5)` — here `T = double`; The **other** generated
+
         function returns `2.5`.
 
+
         - `maxOf(std::string(...), ...)` — `T = std::string`; strings are
+
         compared alphabetically (by bytes), so "apple" is bigger than "banana".
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Put the implementation of the template in `.cpp`** - then in
+
         another file, the compiler will not be able to generate the required
+
         version (linking error).
 
+
         2. **Mix types** — `maxOf(3, 2.5)`: `T` cannot be `int` and `double` at
+
         the same time; `maxOf<double>(3, 2.5)` is clearly needed.
 
+
         3. **Forget that the type must support the operation** — without the `>`
+
         operator, the template is not instantiated.
 
+
         4. **Be afraid of long mistakes** - read the first line, usually there
+
         is a real reason.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"template<typename T> T
-        maxOf(T a, T b) {...}. What happens when maxOf(3, 2.5) is
-        called?","options":["Will return 3.0","Will return 2.5","Compilation
-        error: Ambiguous type T","Returns 3"],"answer":2,"explanation":"Both
-        parameters have ONE type T. But 3 is an int and 2.5 is a double, so the
-        compiler cannot output a single T (both an int and a double at once).
-        This is a compilation error. Solution: bring the types (maxOf(3.0, 2.5))
-        or specify the type explicitly: maxOf<double>(3, 2.5)."}
+        {"type":"prediction","lang":"cpp","question":"template<typename T> T maxOf(T a, T b) {...}. What happens when maxOf(3, 2.5) is called?","options":["Will return 3.0","Will return 2.5","Compilation error: Ambiguous type T","Returns 3"],"answer":2,"explanation":"Both parameters have ONE type T. But 3 is an int and 2.5 is a double, so the compiler cannot output a single T (both an int and a double at once). This is a compilation error. Solution: bring the types (maxOf(3.0, 2.5)) or specify the type explicitly: maxOf<double>(3, 2.5)."}
 
         ```
+
 
 
         ### In practice
@@ -3422,40 +4129,62 @@ topics:
 
         ```cpp
 
+
         template <typename T>
 
+
         T first(const std::vector<T>& items) {
+
             return items.front();
+
         }
 
-        ```**Why it's here:** The template allows you to describe the algorithm
+
+        ```
+
+        **Why it's here:** The template allows you to describe the algorithm
+
         once for compatible types.
 
+
         **Please Note:** Template errors are often clearer after checking the
+
         type requirements.
+
+
+        **Coding task.** Implement a short program or code snippet that demonstrates: parameterize a function or class with a template and deduce its type.
+
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
+
         You learned how to write **templates** — generalized code with "empty
+
         space" for a type (`template <typename T>`) that the compiler
+
         instantiates for each used type **at compile time**. This removes the
+
         same-for-different-types duplication, costs nothing at runtime, and is
+
         the basis of the entire STL. Remember: the implementation is kept in the
+
         header, and template errors fly out on compilation. Next, you will start
+
         using the most famous template container - `std::vector`.
       level: 3
       tags:
         - abstraction
         - c++
   - title: "STL: vector"
-    description: choose the data structure according to the required operations.
-      explain the order, uniqueness, and method of accessing elements.
+    description: "After this topic, learners can use std::vector for insertion, traversal, and in-range access."
     order: 24
-    exerciseFocus: "one operation on the structure; check for duplicates, missing
-      key or empty collection separately"
+    exerciseFocus: "Write a short program demonstrating “use std::vector for insertion, traversal, and in-range access”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "STL: vector"
       content: >-
+
         ### Intuitive explanation
 
         Remember the two pains of raw arrays? They do not know their size and do
@@ -3498,103 +4227,126 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
+
 
         #include <vector>
 
-        int main() {
-            std::vector<int> scores = {50, 80, 65};
-            std::cout << "Спочатку розмір: " << scores.size() << std::endl;
 
-            scores.push_back(90);          // додаємо в кінець
-            scores[0] = 55;                // міняємо перший
+        int main() {
+
+            std::vector<int> scores = {50, 80, 65};
+
+            std::cout << "Initial size: " << scores.size() << std::endl;
+
+
+            scores.push_back(90);          // append to the end
+
+            scores[0] = 55;                // change the first element
+
 
             int sum = 0;
+
             for (int s : scores) sum += s;
 
-            std::cout << "Після push_back розмір: " << scores.size() << std::endl;
-            std::cout << "Перший: " << scores.front() << ", останній: " << scores.back() << std::endl;
-            std::cout << "Сума: " << sum << std::endl;
+
+            std::cout << "Size after push_back: " << scores.size() << std::endl;
+
+            std::cout << "First: " << scores.front() << ", last: " << scores.back() << std::endl;
+
+            std::cout << "Sum: " << sum << std::endl;
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
 
-        Спочатку розмір: 3
+        **Output:**
 
-        Після push_back розмір: 4
-
-        Перший: 55, останній: 90
-
-        Сума: 290
 
         ```
+
+
+        Initial size: 3
+
+        Size after push_back: 4
+
+        First: 55, last: 90
+
+        Sum: 290
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `std::vector<int> scores = {50, 80, 65};` — we create a vector from
+
         three elements at once.
 
+
         - `scores.push_back(90);` — the vector **itself** grows to 4 elements;
+
         the size changes from 3 to 4.
+
 
         - `scores[0] = 55;` — access by index, as in an array (from zero).
 
+
         - `scores.front()` / `scores.back()` — convenient access to the first
+
         and last elements.
 
+
         - The sum of `55 + 80 + 65 + 90 = 290` — all elements have passed
+
         through the range-based cycle.
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Out of bounds** - `v[v.size()]` does not exist; `[]` does not check
+
         for bounds (there is `.at(i)` to check).
 
+
         2. **Hold reference/pointer to element** via `push_back` - reselection
+
         will make it hang.
 
+
         3. **Confuse `size()` and `capacity()`** - the first is how many
+
         elements there are, the second is how much can fit without moving.
 
+
         4. **Confuse `resize' and `reserve'** — `resize' **changes** the number
+
         of elements, `reserve' only reserves capacity in advance.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"std::vector<int> v = {10,
-        20}; int& r = v[0]; v.push_back(30); v.push_back(40); std::cout << r; Is
-        this code safe?","options":["Safe, will print 10","Dangerous: r can hang
-        after push_back","Will always print 0","Compilation
-        error"],"answer":1,"explanation":"r is a reference to v[0]. push_back
-        can run out of space and force the vector to move to new memory, copying
-        the elements and freeing the old one. Then r points to the old, freed
-        address - a dangling link and undefined behavior. Do not hold references
-        to vector elements through operations that extend it."}
+        {"type":"prediction","lang":"cpp","question":"std::vector<int> v = {10, 20}; int& r = v[0]; v.push_back(30); v.push_back(40); std::cout << r; Is this code safe?","options":["Safe, will print 10","Dangerous: r can hang after push_back","Will always print 0","Compilation error"],"answer":1,"explanation":"r is a reference to v[0]. push_back can run out of space and force the vector to move to new memory, copying the elements and freeing the old one. Then r points to the old, freed address - a dangling link and undefined behavior. Do not hold references to vector elements through operations that extend it."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: use std::vector for insertion, traversal, and in-range access.
 
-        ```cpp
-
-        std::vector<int> numbers{2, 4, 6};
-
-        std::cout << numbers.at(0) << '\n';
-
-        ```**Why it's here:** `std::vector` stores a sequence and can change
-        size. `at()` checks for bounds.
-
-        **Note:** `operator[]` does not check for bounds.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -3610,14 +4362,13 @@ topics:
         - collections
         - c++
   - title: "STL: string"
-    description: process text without accidentally losing characters or formatting.
-      explain the difference between search, parsing, and transformation.
+    description: "After this topic, learners can apply std::string operations while handling a missing match."
     order: 25
-    exerciseFocus: "one conversion or string validation; check spaces, case and
-      empty line separately"
+    exerciseFocus: "Write a short program demonstrating “apply std::string operations while handling a missing match”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "STL: string"
       content: >-
+
         ### Intuitive explanation
 
         You already know that `std::string` itself manages memory. But its real
@@ -3659,101 +4410,122 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
+
 
         #include <string>
 
+
         int main() {
+
             std::string email = "olena@example.com";
 
-            std::size_t at = email.find('@');            // позиція символу @
-            std::string user   = email.substr(0, at);    // до @
-            std::string domain = email.substr(at + 1);   // після @
 
-            std::cout << "Логін: " << user << std::endl;
-            std::cout << "Домен: " << domain << std::endl;
+            std::size_t at = email.find('@');            // position of @
+
+            std::string user   = email.substr(0, at);    // before @
+
+            std::string domain = email.substr(at + 1);   // after @
+
+
+            std::cout << "Username: " << user << std::endl;
+
+            std::cout << "Domain: " << domain << std::endl;
+
 
             if (email.find("gmail") == std::string::npos)
-                std::cout << "Це не gmail" << std::endl;
+
+                std::cout << "Not Gmail" << std::endl;
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
 
-        Логін: olena
+        **Output:**
 
-        Домен: example.com
-
-        Це не gmail
 
         ```
+
+
+        Username: olena
+
+        Domain: example.com
+
+        Not Gmail
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `email.find('@')` — returns the position of the first `@` (here — 5);
+
         type `std::size_t` (unsigned).
 
+
         - `email.substr(0, at)` — cuts from the beginning `at` characters:
+
         `"olena"`.
 
+
         - `email.substr(at + 1)` — from the position after `@` and **to the
+
         end**: `"example.com"`.
 
+
         - `email.find("gmail")` - no substring, so `std::string::npos` is
+
         returned.
+
 
         - The comparison with `npos` is true - we print "This is not gmail".
 
+
         ### Typical mistakes of a beginner
 
+
         1. **Compare the result of `find` with -1** instead of
+
         `std::string::npos` - the logic quietly breaks down.
 
+
         2. **`substr` out of range** — `pos` longer than length will throw an
+
         `out_of_range` exception.
 
+
         3. **Cut UTF-8 in the middle of a letter** - positions in bytes, so
+
         `substr` can "cut" a Cyrillic character in half.
 
+
         4. **Change string after taking `c_str()`** - old pointer to C-string
+
         may become invalid.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"std::string s = \"hello\";
-        if (s.find(\"z\") == std::string::npos) std::cout << \"none\"; else
-        std::cout << \"is\"; What will be printed?","options":["there
-        are","there is no","Compilation error","An empty
-        line"],"answer":1,"explanation":"There is no 'z' character in the string
-        \"hello\", so find returns the special value std::string::npos (not -1
-        and not an error). The check == npos is true, so \"none\" is printed. It
-        is through npos, and not through negative numbers, that a failed search
-        in std::string is checked."}
+        {"type":"prediction","lang":"cpp","question":"std::string s = \"hello\"; if (s.find(\"z\") == std::string::npos) std::cout << \"none\"; else std::cout << \"is\"; What will be printed?","options":["there are","there is no","Compilation error","An empty line"],"answer":1,"explanation":"There is no 'z' character in the string \"hello\", so find returns the special value std::string::npos (not -1 and not an error). The check == npos is true, so \"none\" is printed. It is through npos, and not through negative numbers, that a failed search in std::string is checked."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: apply std::string operations while handling a missing match.
 
-        ```cpp
-
-        std::string message = "C++";
-
-        std::cout << message.size() << '\n';
-
-        ```**Why it's here:** `std::string` stores a sequence of characters and
-        `size()` returns the length.
-
-        **Please note:** Length in bytes and number of Unicode characters may
-        vary.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -3770,15 +4542,15 @@ topics:
         - text
         - c++
   - title: "STL: map and unordered_map"
-    description: choose the data structure according to the required operations.
-      explain the order, uniqueness, and method of accessing elements.
+    description: "After this topic, learners can choose map or unordered_map based on ordering and key-lookup needs."
     order: 26
-    exerciseFocus: "one operation on the structure; check for duplicates, missing
-      key or empty collection separately"
+    exerciseFocus: "Write a short program demonstrating “choose map or unordered_map based on ordering and key-lookup needs”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "STL: map and unordered_map"
       content: |-
+
         ### Intuitive explanation
+
         In `vector`, you search for an element by **numeric index**: `v[0]`, `v[1]`. And what if the key should not be a number, but a word? "How old is Ola?", "How many votes for coffee?". This requires access **by name**, not by position.
 
         This is an **associative container** — a dictionary that stores "**key → value**" pairs. Like a paper dictionary: you search for a word (key) — you get a translation (meaning). C++ has two such dictionaries, and the difference between them is important.
@@ -3789,11 +4561,13 @@ topics:
         The selection rule is simple: the order of the keys is required — `map`; only speed is important and order is indifferent - `unordered_map`.
 
         ### What happens at runtime
+
         `map` stores the pairs in a **balanced tree** (so the sorting is "free") and `unordered_map` stores them in a hash table, where the key is converted to a hash number indicating which "basket" to put the pair into.
 
         Now, the major pitfall of both is the **`operator[]`** behavior. When you write `m["new"]` and there is no such key yet, `[]` **silently** creates it with the default value (for `int` it is 0). This is very convenient (the `votes[name]++` counter starts a new item from zero by itself), but also insidious: a simple ``check'' `if (m["unknown"] == 0)` will **add** this key to the dictionary, bloating it with unnecessary entries.Therefore, remember the distribution of roles: `[]` — when you want to **create or change**; and to just **check for presence** without adding anything, `find` (returns an iterator or `end()` if the key is not present) or `count` (0 or 1).
 
         ### Minimal code example
+
         ```cpp
         #include <iostream>
         #include <map>
@@ -3801,26 +4575,30 @@ topics:
 
         int main() {
             std::map<std::string, int> votes;
-            for (const std::string& name : {"кава", "чай", "кава", "кава", "чай"}) {
-                votes[name]++;                 // ключ створюється сам зі значенням 0, тоді +1
+            for (const std::string& name : {"coffee", "tea", "coffee", "coffee", "tea"}) {
+                votes[name]++;                 // the key is inserted with value 0, then incremented
             }
 
-            for (const auto& [drink, count] : votes) {   // map іде за алфавітом ключів
+            for (const auto& [drink, count] : votes) {   // map iterates keys in alphabetical order
                 std::cout << drink << ": " << count << std::endl;
             }
 
-            if (votes.find("сік") == votes.end())
-                std::cout << "За сік ніхто не голосував" << std::endl;
+            if (votes.find("juice") == votes.end())
+                std::cout << "No one voted for juice" << std::endl;
             return 0;
         }
-        ```Output:
         ```
-        кава: 3
-        чай: 2
-        За сік ніхто не голосував
+
+        **Output:**
+        ```
+
+        coffee: 3
+        tea: 2
+        No one voted for juice
         ```
 
         ### Explanation of each line of the example
+
         - `std::map<std::string, int> votes;` is a dictionary "drink (key) → number of votes (value)".
         - `votes[name]++;` — if the key does not exist yet, `[]` starts it with a value of 0, and `++` makes it 1; then simply counts.
         - `for (const auto& [drink, count] : votes)` — structural binding decomposes the pair into key and value.
@@ -3828,15 +4606,18 @@ topics:
         - `votes.find("juice") == votes.end()` - correct presence check: no key, and `find` returns `end()` (without adding anything).
 
         ### Typical mistakes of a beginner
+
         1. **Check availability via `[]`** — and inadvertently **create** an empty record; to check — `find`/`count`.
         2. **Take `map` when order is not needed** — `unordered_map` would be noticeably faster.
         3. **Wait for order from `unordered_map'** - there is none; sorting will output the keys in random order.
         4. **Linearly searching for the key in a cycle** is useless; associative containers are designed to search by key quickly.
 
         ### Try to predict
+
         ```interactive
 
         {"type":"prediction","lang":"cpp","question":"std::map<std::string,int> m; m[\"a\"] = 1; if (m[\"b\"] == 0) {} std::cout << m.size(); What will be printed?","options":["1","2","0","Error"],"answer":1,"explanation":"m[\"a\"] = 1 adds the first key. But the expression m[\"b\"] also works as an operator[] in the check: there is no key \"b\", so map SILENTLY creates it with a value of 0. Now the map has two keys, and size() = 2. To check for presence without adding, it was necessary to m.find(\"b\") or m.count(\"b\")."}
+
         ```
 
         ### In practice
@@ -3844,26 +4625,33 @@ topics:
         A small fragment to understand the idea of ​​the topic:
         ```cpp
         std::unordered_map<std::string, int> prices{{"tea", 40}};
-        ```**Why it's here:** `unordered_map` searches for a value by a key in constant time on average.
+        ```
+
+        **Why it's here:** `unordered_map` searches for a value by a key in constant time on average.
 
         **Please note:** The bypass order should not be considered guaranteed.
 
+        **Coding task.** Implement a short program or code snippet that demonstrates: choose map or unordered_map based on ordering and key-lookup needs.
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
+
         You learned how to store key → value pairs in associative containers: **`map`** keeps keys sorted (O(log n) lookup), and **`unordered_map`** is an unordered hash table, but with average O(1) access. The main trap is `operator[]` **creates** the missing key with a default value; for pure availability check use `find` or `count`. The choice between them is dictated by the need for order. Then there are their key-only relatives: `set` and `unordered_set`.
       level: 3
       tags:
         - collections
         - c++
   - title: "STL: set and unordered_set"
-    description: choose the data structure according to the required operations.
-      explain the order, uniqueness, and method of accessing elements.
+    description: "After this topic, learners can store unique values in a set and account for traversal order."
     order: 27
-    exerciseFocus: "one operation on the structure; check for duplicates, missing
-      key or empty collection separately"
+    exerciseFocus: "Write a short program demonstrating “store unique values in a set and account for traversal order”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "STL: set and unordered_set"
       content: |-
+
         ### Intuitive explanation
+
         Imagine you have to answer two questions: "what are the **unique** values in this set?" and "is there a number 7 in the set?". With `vector' it's gloom: checking for uniqueness is a nested loop, searching is going through all the elements. And the task is simple, like a mathematical **set**: a set of different elements, where each one is either present or absent, and there are no repetitions.
 
         `std::set` is a pure set. Two of its superpowers are **automatic uniqueness** (add the same element twice - the second time is simply ignored) and **fast validation** (`count` in O(log n), not looping through everything). Like `map`, but **no values** - just keys.
@@ -3871,38 +4659,44 @@ topics:
         And here is the same pair as in the previous topic: **`std::set`** keeps elements **sorted**, and **`std::unordered_set`** is an unordered hash set, but faster (on average O(1)). Most often `set` is taken for two things: **remove duplicates** and **quickly check "is this element available?"**.
 
         ### What happens at runtime
+
         Inside, `set` is the same balanced tree as `map` (so the elements are sorted), and `unordered_set` is a hash table. The difference with their `map'-relatives is only that the element itself is stored, and not the "key-value" pair.
 
         The key behavior is **inserting a duplicate does nothing**. `insert` returns information whether a new element has really been added, but even if not, there is no error, the set just remains as it was. This is what the classic technique is based on: "drive" a vector with repetitions through `set' — and at the output you have only unique values, even sorted ones. One line.Membership check - `count(x)`: returns 1 if the element is present and 0 if not (a set cannot contain more than one). This replaces the slow manual search in `vector` and reads naturally as a condition: `if (s.count(x))`.
 
         ### Minimal code example
+
         ```cpp
         #include <iostream>
         #include <set>
         #include <vector>
 
         int main() {
-            std::vector<int> raw = {5, 3, 5, 1, 3, 8, 1};   // з повторами
-            std::set<int> unique(raw.begin(), raw.end());   // set сам прибирає дублікати й сортує
+            std::vector<int> raw = {5, 3, 5, 1, 3, 8, 1};   // with duplicates
+            std::set<int> unique(raw.begin(), raw.end());   // set removes duplicates and sorts them
 
-            std::cout << "Унікальні (відсортовані): ";
+            std::cout << "Unique (sorted): ";
             for (int x : unique) std::cout << x << " ";
             std::cout << std::endl;
 
-            std::cout << "Всього унікальних: " << unique.size() << std::endl;
-            std::cout << "Чи є 3? " << (unique.count(3) ? "так" : "ні") << std::endl;
-            std::cout << "Чи є 7? " << (unique.count(7) ? "так" : "ні") << std::endl;
+            std::cout << "Number of unique values: " << unique.size() << std::endl;
+            std::cout << "Is 3 present? " << (unique.count(3) ? "yes" : "no") << std::endl;
+            std::cout << "Is 7 present? " << (unique.count(7) ? "yes" : "no") << std::endl;
             return 0;
         }
-        ```Output:
         ```
-        Унікальні (відсортовані): 1 3 5 8
-        Всього унікальних: 4
-        Чи є 3? так
-        Чи є 7? ні
+
+        **Output:**
+        ```
+
+        Unique (sorted): 1 3 5 8
+        Number of unique values: 4
+        Is 3 present? yes
+        Is 7 present? no
         ```
 
         ### Explanation of each line of the example
+
         - `std::vector<int> raw = {5, 3, 5, 1, 3, 8, 1};` are seven numbers, including repetitions (5, 3, 1).
         - `std::set<int> unique(raw.begin(), raw.end());` — we build a set from a vector: duplicates are removed, the rest is sorted.
         - Sorting gives `1 3 5 8` — four **unique** values ​​in ascending order.
@@ -3910,15 +4704,18 @@ topics:
         - `unique.count(7)` - returns 0 (no element), so no.
 
         ### Typical mistakes of a beginner
+
         1. **Wait for `set` to save duplicates** — no, duplicates are silently discarded.
         2. **Wait for order from `unordered_set'** - there is none; `set` is required for sorted enumeration.
         3. **Take `set` where `vector` is enough** — if uniqueness and fast search are not needed, `vector` is simpler and more compact.
         4. **Looking for an element in a cycle** in the plural is useless; for that there is `count`/`find` for the logarithm.
 
         ### Try to predict
+
         ```interactive
 
         {"type":"prediction","lang":"cpp","question":"std::set<int> s; s.insert(4); s.insert(4); s.insert(4); std::cout << s.size(); What will be printed?","options":["3","1","0","Error"],"answer":1,"explanation":"set stores only UNIQUE elements. The first insert(4) adds a quad, and the next two insert(4)s do nothing — such an element already exists. Therefore, there is one element in the set, and size() = 1. Duplicate reinsertions are not an error - they are simply ignored."}
+
         ```
 
         ### In practice
@@ -3926,25 +4723,31 @@ topics:
         A small fragment to understand the idea of ​​the topic:
         ```cpp
         std::unordered_set<std::string> tags{"cpp", "code"};
-        ```**Why it's here:** `unordered_set` stores unique elements and quickly checks for membership.
+        ```
+
+        **Why it's here:** `unordered_set` stores unique elements and quickly checks for membership.
 
         **Please note:** Round order is not guaranteed.
 
+        **Coding task.** Implement a short program or code snippet that demonstrates: store unique values in a set and account for traversal order.
+
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
+
         ### Summary
+
         You've mastered STL sets: **`set`** stores only unique elements in sorted order (O(log n) operations) and **`unordered_set`** is an unordered hash set, but faster (O(1) on average). Their two main roles are to **remove duplicates** (one line across the range) and **quickly check for membership** (`count`), replacing the slow manual search in `vector`. Repeat insertion is simply ignored. Next, you will learn to process any containers in the same way - through STL algorithms.
       level: 3
       tags:
         - collections
         - c++
   - title: "STL: algorithms"
-    description: choose the data structure according to the required operations.
-      explain the order, uniqueness, and method of accessing elements.
+    description: "After this topic, learners can apply an STL algorithm to a [begin, end) range."
     order: 28
-    exerciseFocus: "one operation on the structure; check for duplicates, missing
-      key or empty collection separately"
+    exerciseFocus: "Write a short program demonstrating “apply an STL algorithm to a [begin, end) range”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: "STL: algorithms"
       content: >-
+
         ### Intuitive explanation
 
         How many times did you write the loop to find the maximum? Sort?
@@ -3987,110 +4790,139 @@ topics:
 
         ```cpp
 
+
         #include <iostream>
+
 
         #include <vector>
 
+
         #include <algorithm>
+
 
         #include <numeric>
 
+
         int main() {
+
             std::vector<int> v = {40, 10, 30, 20, 50};
 
-            std::sort(v.begin(), v.end());                        // за зростанням
-            std::cout << "Відсортовано: ";
+
+            std::sort(v.begin(), v.end());                        // in ascending order
+
+            std::cout << "Sorted: ";
+
             for (int x : v) std::cout << x << " ";
+
             std::cout << std::endl;
 
-            auto it = std::find(v.begin(), v.end(), 30);          // пошук 30
-            std::cout << "Знайдено 30 на позиції: " << (it - v.begin()) << std::endl;
 
-            int total = std::accumulate(v.begin(), v.end(), 0);   // сума
-            std::cout << "Сума: " << total << std::endl;
+            auto it = std::find(v.begin(), v.end(), 30);          // find 30
 
-            int big = *std::max_element(v.begin(), v.end());      // максимум
-            std::cout << "Максимум: " << big << std::endl;
+            std::cout << "Found 30 at index: " << (it - v.begin()) << std::endl;
+
+
+            int total = std::accumulate(v.begin(), v.end(), 0);   // sum
+
+            std::cout << "Sum: " << total << std::endl;
+
+
+            int big = *std::max_element(v.begin(), v.end());      // maximum
+
+            std::cout << "Maximum: " << big << std::endl;
+
             return 0;
+
         }
 
-        ```Output:
 
         ```
 
-        Відсортовано: 10 20 30 40 50
+        **Output:**
 
-        Знайдено 30 на позиції: 2
-
-        Сума: 150
-
-        Максимум: 50
 
         ```
+
+
+        Sorted: 10 20 30 40 50
+
+        Found 30 at index: 2
+
+        Sum: 150
+
+        Maximum: 50
+
+        ```
+
 
 
         ### Explanation of each line of the example
 
+
         - `std::sort(v.begin(), v.end())` — sorts the entire vector in ascending
+
         order: `10 20 30 40 50`.
 
+
         - `std::find(v.begin(), v.end(), 30)` — returns an iterator to element
+
         `30`.
 
+
         - `it - v.begin()` — difference of iterators gives the **position**
+
         (index 2) of the found element.
 
+
         - `std::accumulate(..., 0)` — accumulates all elements, starting from 0:
+
         `10+20+30+40+50 = 150`.
 
+
         - `*std::max_element(...)` — returns the iterator to the largest one;
+
         the asterisk `*` gets the exact value (`50`).
+
 
         ### Typical mistakes of a beginner
 
+
         1. **Forget `#include <algorithm>`** (or `<numeric>` for `accumulate`) -
+
         "unknown function".
 
+
         2. **Do not check the result of `find` on `end()`** — and dereference
+
         the iterator "after the end".
 
+
         3. **Confuse range boundaries** - `end()` points **behind** the last
+
         element, not to it.
 
+
         4. **`sort` for `std::list`** does not compile; there is its `.sort()`
+
         method.
+
 
         ### Try to predict
 
+
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"std::vector<int> v = {5,
-        2, 8}; auto it = std::find(v.begin(), v.end(), 9); What does it
-        contain?","options":["Iterator to 9","v.end() — because there is no
-        9","The value is 0","nullptr"],"answer":1,"explanation":"The number 9 is
-        not in the vector. When std::find doesn't find anything, it returns the
-        final iterator v.end() (the position after the last element) — the
-        equivalent of npos for strings. Therefore, the presence is checked by
-        the condition it != v.end(); it is impossible to distinguish such an
-        it."}
+        {"type":"prediction","lang":"cpp","question":"std::vector<int> v = {5, 2, 8}; auto it = std::find(v.begin(), v.end(), 9); What does it contain?","options":["Iterator to 9","v.end() — because there is no 9","The value is 0","nullptr"],"answer":1,"explanation":"The number 9 is not in the vector. When std::find doesn't find anything, it returns the final iterator v.end() (the position after the last element) — the equivalent of npos for strings. Therefore, the presence is checked by the condition it != v.end(); it is impossible to distinguish such an it."}
 
         ```
 
 
+
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
+        **Coding task.** Implement a short program or code snippet that demonstrates: apply an STL algorithm to a [begin, end) range.
 
-        ```cpp
-
-        auto it = std::find(values.begin(), values.end(), target);
-
-        ```**Why it's here:** Iterators specify a range, and the standard
-        algorithm works with it regardless of the specific collection.
-
-        **Note:** Do not use an iterator after changing the container if it has
-        become invalid.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
 
@@ -4107,15 +4939,15 @@ topics:
         - collections
         - c++
   - title: Iterators
-    description: explain the main idea of ​​the topic in your own words. read a
-      short example and predict its outcome.
+    description: "After this topic, learners can traverse a container with an iterator and check for invalidation."
     order: 29
-    exerciseFocus: "one key idea of ​​C++ with short deterministic stdout and
-      boundary case checking"
+    exerciseFocus: "Write a short program demonstrating “traverse a container with an iterator and check for invalidation”. Check one relevant boundary or failure scenario when the topic includes one, and explain the outcome."
     theory:
       title: Iterators
       content: |-
+
         ### Intuitive explanation
+
         You have already come across `v.begin()`, `v.end()`, ``iterator'' several topics in a row. It's time to look under the hood. In `vector`, elements are addressed by number (`v[2]`), but in other containers - `map`, `set`, `list` - there are no numerical indexes. How then to write **one** code that will pass **any** container?
 
         The STL answer is an **iterator**: a single, universal "element pointer" that can do two things - give the current element and **go to the next**. An analogy is the finger you use to guide a line of text: it points to the current letter (`*it`) and moves on (`++it`). It doesn't matter if it's a `vector` or a `set` - the iterator finger moves the same way.
@@ -4123,11 +4955,13 @@ topics:
         Iterators are what make all the magic of STL algorithms possible: `std::sort`, `std::find` do not know about specific containers, they only know the "language of iterators". Once you master them, you understand why one sort works everywhere.
 
         ### What happens at runtime
+
         Each container provides two key iterators. **`begin()`** points to the **first** element. **`end()`** — and this is critical — points **not to the last element, but to the position AFTER it**, to an imaginary "stop marker". Therefore, the loop spins while it != end(): as soon as the finger reaches the marker, that's it, the elements are over.
 
         Three operations make up the "language of iterators": `*it` - dereferencing (give the value I point to), `++it` - step to the next one, `it != end()` - "isn't it the end yet?". Through `*it` you can not only read, but also **write**: `*it = 99` will change the element itself in the container.Two dangers. The first: **never dename `end()`** - there is no element there, it is UB. The second, more insidious one is **invalidation of iterators**: if you change the container itself while traversing (e.g. `push_back` to `vector`, causing it to move to new memory), your iterator may "hang" pointing to old, freed memory. Do not change the container while iterating over it. By the way, the modern `for (int x : v)` is just a convenient wrapper over `begin`/`end`/`++`, so the same mechanism works internally.
 
         ### Minimal code example
+
         ```cpp
         #include <iostream>
         #include <vector>
@@ -4136,25 +4970,29 @@ topics:
             std::vector<int> v = {10, 20, 30};
 
             for (auto it = v.begin(); it != v.end(); ++it) {
-                std::cout << *it << " ";        // розіменування дає значення
+                std::cout << *it << " ";        // dereferencing yields the value
             }
             std::cout << std::endl;
 
-            auto it = v.begin();                 // ітератор на перший
-            ++it;                                // крок уперед
-            std::cout << "Другий елемент: " << *it << std::endl;
-            *it = 99;                            // змінюємо елемент через ітератор
-            std::cout << "Після зміни: " << v[1] << std::endl;
+            auto it = v.begin();                 // iterator to the first element
+            ++it;                                // move one step forward
+            std::cout << "Second element: " << *it << std::endl;
+            *it = 99;                            // change the element through the iterator
+            std::cout << "After change: " << v[1] << std::endl;
             return 0;
         }
-        ```Output:
         ```
+
+        **Output:**
+        ```
+
         10 20 30
-        Другий елемент: 20
-        Після зміни: 99
+        Second element: 20
+        After change: 99
         ```
 
         ### Explanation of each line of the example
+
         - `auto it = v.begin();` — iterator to the first element; `auto` takes the correct type automatically.
         - `it != v.end()` is a loop condition: we spin until we reach the "end" marker.
         - `*it` - dereference: gives the value of the current element (`10`, then `20`, then `30`).
@@ -4162,27 +5000,28 @@ topics:
         - `*it = 99;` — writing through the iterator changes **the** element in the vector, so `v[1]` becomes `99`.
 
         ### Typical mistakes of a beginner
+
         1. **Distinguish `end()`** — there is no element there; calling `*v.end()` is undefined behavior.
         2. **Change container during traversal** — `push_back` or `erase` can disable the iterator.
         3. **Confuse `iterator` and `const_iterator`** - you cannot write through the second one (`*it = ...` does not compile).
         4. **Considering `end()` as the last element** is the position **behind** it, so the loop goes `!= end()`, not `<= `.
 
         ### What lies in the memory
+
         ```interactive
 
         {"type":"memory","caption":"Iterators begin() and end() over vector {10, 20, 30}","stack":[{"name":"it = begin()","ref":"e0"},{"name":"end()","ref":"past"}],"heap":[{"id":"e0","value":"[0] = 10"},{"id":"e1","value":"[1] = 20"},{"id":"e2","value":"[2] = 30"},{"id":"past","value":"(after the last one there is a stop marker, there is no element)"}],"note":"begin() points to the first element (10). Each ++it shifts it: e0 → e1 → e2. When it reaches past (the position AFTER the last), the condition it != end() becomes false and the loop stops. Important: end() does not point to an element, so *end() cannot be dereferenced."}
+
         ```
 
         ### In practice
 
-        A small fragment to understand the idea of ​​the topic:
-        ```cpp
-        auto it = std::find(values.begin(), values.end(), target);
-        ```**Why it's here:** Iterators specify a range, and the standard algorithm works with it regardless of the specific collection.
+        **Coding task.** Implement a short program or code snippet that demonstrates: traverse a container with an iterator and check for invalidation.
 
-        **Note:** Do not use an iterator after changing the container if it has become invalid.
+        **Check your work.** Predict the behavior before running it. Test a typical case and, when relevant, one boundary or failure scenario; compare the result with your prediction and explain what it shows.
 
         ### Summary
+
         You have analyzed **iterators** - universal "pointers to an element", a common language between containers and STL algorithms. Their three operations are `*it` (give/change value), `++it` (one step further), `it != end()` (isn't it the end). Remember the main thing about boundaries: `begin()` is the first element, and `end()` is the position **behind** the last one, which **cannot be dereferenced**; don't change the container during traversal so as not to invalidate the iterator. Range-based `for` is a convenient wrapper over this mechanism. Next is how the program reacts to errors due to exceptions.
       level: 3
       tags:
@@ -4197,6 +5036,7 @@ topics:
     theory:
       title: Exceptions
       content: >-
+
         ### Intuitive explanation
 
         Imagine a function that divides numbers. What to do when the divisor is
@@ -4248,7 +5088,7 @@ topics:
 
         int divide(int a, int b) {
             if (b == 0)
-                throw std::runtime_error("ділення на нуль");   // кидаємо сигнал тривоги
+                throw std::runtime_error("division by zero");   // throw an error signal
             return a / b;
         }
 
@@ -4259,24 +5099,26 @@ topics:
                     int result = divide(p[0], p[1]);
                     std::cout << p[0] << " / " << p[1] << " = " << result << std::endl;
                 } catch (const std::exception& e) {
-                    std::cout << p[0] << " / " << p[1] << " -> помилка: " << e.what() << std::endl;
+                    std::cout << p[0] << " / " << p[1] << " -> error: " << e.what() << std::endl;
                 }
             }
-            std::cout << "Програма продовжила роботу" << std::endl;
+            std::cout << "Program continued working" << std::endl;
             return 0;
         }
 
-        ```Output:
+        ```
+
+        Output:
 
         ```
 
         10 / 2 = 5
 
-        7 / 0 -> помилка: ділення на нуль
+        7 / 0 -> error: division by zero
 
         20 / 4 = 5
 
-        Програма продовжила роботу
+        Program continued working
 
         ```
 
@@ -4314,18 +5156,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"cpp","question":"In the loop, the call to
-        divide(7, 0) throws an exception caught in catch. What happens next with
-        the remaining iterations of the loop?","options":["The program will
-        crash","catch will handle the error and the loop will continue with
-        subsequent iterations","The cycle will start over","The rest of the
-        iterations will be skipped silently"],"answer":1,"explanation":"An
-        exception unrolls the stack only to the nearest matching catch — here it
-        is inside a loop. After processing in the catch, the execution continues
-        as usual, so the next iterations (20/4) are executed normally. That is
-        why 20/4 = 5 and the final line appear in the output after the error:
-        the program did not crash."}
+        {"type":"prediction","lang":"cpp","question":"In the loop, the call to divide(7, 0) throws an exception caught in catch. What happens next with the remaining iterations of the loop?","options":["The program will crash","catch will handle the error and the loop will continue with subsequent iterations","The cycle will start over","The rest of the iterations will be skipped silently"],"answer":1,"explanation":"An exception unrolls the stack only to the nearest matching catch — here it is inside a loop. After processing in the catch, the execution continues as usual, so the next iterations (20/4) are executed normally. That is why 20/4 = 5 and the final line appear in the output after the error: the program did not crash."}
 
         ```
 
@@ -4337,12 +5168,14 @@ topics:
         ```cpp
 
         try {
-            throw std::runtime_error("помилка");
+            throw std::runtime_error("error");
         } catch (const std::exception& error) {
             std::cout << error.what();
         }
 
-        ```**Why it's here:** The exception passes information about the problem
+        ```
+
+        **Why it's here:** The exception passes information about the problem
         to a compatible `catch`.
 
         **Note:** Do not use exceptions as a replacement for every conditional

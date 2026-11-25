@@ -26,19 +26,25 @@ topics:
       For the report below, compilation and execution succeed. Time and memory equal their limits, so neither resource check fails. The outputs differ, which makes the verdict WA.
 
       ```text
+
       1 1 100 100 200 200 0
+
       ```
 
       **Output:**
 
       ```text
+
       WA
+
       ```
 
       If both compilation and execution failed, CE wins because it is checked first. The program never reaches the later checks for that report.
 
       ```interactive
+
       {"type":"quiz","caption":"Apply the priority in order; equality with a limit is allowed.","questions":[{"question":"Compilation and execution succeeded, timeMs equals timeLimitMs, memoryMb equals memoryLimitMb, and outputMatches is 0. What is the verdict?","options":["TLE","MLE","WA"],"answer":2,"explanation":"Both resource measurements are allowed at equality. The answer differs, so the first failing check is WA."},{"question":"The compilation flag and runtime flag are both 0. Which verdict is reported first?","options":["RE","CE","AC"],"answer":1,"explanation":"CE has priority over every later check, including RE."}]}
+
       ```
 
       ### Minimal code example
@@ -46,6 +52,7 @@ topics:
       This complete program applies the same priority to a seven-field report. The simulator’s Judge uses the real execution result; this example teaches how to interpret a report.
 
       ```python
+
       import sys
 
       compile_ok, runtime_ok, time_ms, time_limit_ms, memory_mb, memory_limit_mb, output_matches = map(
@@ -66,6 +73,7 @@ topics:
           verdict = "AC"
 
       print(verdict)
+
       ```
 
       ### Line-by-line explanation
@@ -121,7 +129,9 @@ topics:
       For n=200,000, n² is 40,000,000,000. A small example can finish instantly while the largest input exceeds the limit. Memory matters too: a list of n values needs O(n), while a few counters need O(1). This example compares the estimate with a stated operation budget; exact equality is allowed. Python int computes the product exactly, but large integer operations still have a cost.
 
       ```interactive
+
       {"type":"quiz","questions":[{"question":"Which grows fastest for large n?","options":["n","n log n","n²"],"answer":2,"explanation":"The number of pairs grows quadratically."}]}
+
       ```
 
       ### Minimal code example
@@ -129,9 +139,11 @@ topics:
       The program compares an estimate; it does not perform n² operations.
 
       ```python
+
       n, budget = map(int, input().split())
       operations = n * n
       print("SAFE" if operations <= budget else "TOO_SLOW")
+
       ```
 
       ### Line-by-line explanation
@@ -146,7 +158,9 @@ topics:
       For n=1000, the estimate is 1,000,000. A budget of 1,000,000 gives SAFE; 999,999 gives TOO_SLOW.
 
       ```interactive
+
       {"type":"quiz","questions":[{"question":"Why can two nested loops be unsuitable when n is large?","options":["Their work can grow as n²","Loops have no cost","They always use constant memory"],"answer":0,"explanation":"Substituting the maximum n can reveal billions of iterations."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -194,7 +208,9 @@ topics:
       Generated practice allows n up to 2,000,000 and each value to be between -10⁹ and 10⁹, so the absolute sum is at most 2·10¹⁵. Python int does not overflow at 32 bits. However, read().split() retains byte tokens in a list; iterating over the tokens avoids creating another list of integer objects, but does not make token storage disappear. Under a stricter memory limit, consider incremental line reading.
 
       ```interactive
+
       {"type":"quiz","questions":[{"question":"What does sys.stdin.buffer.read().split() retain?","options":["A list of byte tokens","Only one integer","No input data"],"answer":0,"explanation":"The whole input is split into byte tokens, which uses memory."}]}
+
       ```
 
       ### Minimal code example
@@ -202,6 +218,7 @@ topics:
       Read n and then n measurements. Convert and add each value immediately; do not build a list of all integers.
 
       ```python
+
       import sys
 
       tokens = iter(sys.stdin.buffer.read().split())
@@ -210,6 +227,7 @@ topics:
       for _ in range(n):
           total += int(next(tokens))
       sys.stdout.write(str(total) + "\n")
+
       ```
 
       ### Line-by-line explanation
@@ -225,7 +243,9 @@ topics:
       For n=4 and values 1000000000 1000000000 1000000000 -500000000, the sum is 2500000000. Python `int` stores it exactly; a separate list is still unnecessary when the task only asks for a sum.
 
       ```interactive
+
       {"type":"quiz","questions":[{"question":"How many running-sum variables are needed for any n?","options":["O(1)","O(n)","O(n²)"],"answer":0,"explanation":"The loop keeps one sum, regardless of the number of inputs."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -275,12 +295,15 @@ topics:
       For [-3, 0, 4, 2], the first two values leave the state unchanged. After 4, count=1 and total=4; after 2, count=2 and total=6. Each value is checked once.
 
       ```interactive
+
       {"type":"trace","lang":"python","caption":"Step through the example and follow the variable state.","code":["count = 0","total = 0","for value in values:","    if value > 0:","        count += 1","        total += value"],"steps":[{"line":1,"vars":{"count":"0","total":"0"}},{"line":4,"vars":{"value":"0","count":"0","total":"0"}},{"line":6,"vars":{"value":"4","count":"1","total":"4"}},{"line":6,"vars":{"value":"2","count":"2","total":"6"},"note":"For [-3, 0, 4, 2], the first two values leave the state unchanged. After 4, count=1 and total=4; after 2, count=2 and total=6. Each value is checked once."}]}
+
       ```
 
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n = data[0]
@@ -291,6 +314,7 @@ topics:
               count += 1
               total += value
       print(count, total)
+
       ```
 
       ### Line-by-line explanation
@@ -305,7 +329,9 @@ topics:
       Replace the final 2 in the example with 0, then with -5. Predict count and total for each change and explain why the condition rejects both values.
 
       ```interactive
+
       {"type":"quiz","caption":"Check your understanding.","questions":[{"question":"Is zero added to the sum of positive values?","options":["Yes","No"],"answer":1,"explanation":"Zero does not satisfy value > 0."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -355,12 +381,15 @@ topics:
       For [-8, -3, -3, -6], the minimum stays -8. The first -3 becomes the maximum with frequency 1; the next raises it to 2; -6 does not change the maximum state.
 
       ```interactive
+
       {"type":"trace","lang":"python","caption":"Step through the example and follow the variable state.","code":["minimum = maximum = first","max_count = 1","for value in remaining:","    if value > maximum:","        maximum = value","        max_count = 1","    elif value == maximum:","        max_count += 1"],"steps":[{"line":1,"vars":{"minimum":"-8","maximum":"-8","max_count":"1"}},{"line":4,"vars":{"value":"-3","maximum":"-3","max_count":"1"}},{"line":8,"vars":{"value":"-3","maximum":"-3","max_count":"2"},"note":"For [-8, -3, -3, -6], the minimum stays -8. The first -3 becomes the maximum with frequency 1; the next raises it to 2; -6 does not change the maximum state."}]}
+
       ```
 
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n = data[0]
@@ -374,6 +403,7 @@ topics:
           elif value == maximum:
               max_count += 1
       print(minimum, maximum, max_count)
+
       ```
 
       ### Line-by-line explanation
@@ -388,7 +418,9 @@ topics:
       In [-8, -3, -3, -6], replace the final -6 with -3. Predict the minimum, maximum, and frequency, then replace it with -10 and compare which results change.
 
       ```interactive
+
       {"type":"quiz","caption":"Check your understanding.","questions":[{"question":"How should minimum be initialized for a non-empty array?","options":["From the first value","From zero"],"answer":0,"explanation":"The first value exists and may be negative."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -438,12 +470,15 @@ topics:
       In [5, -2, 7, 4], l=2 and r=4 select -2, 7, and 4. Zero-based indices 1, 2, 3 produce sum 9; the interval length is r−l+1.
 
       ```interactive
+
       {"type":"trace","lang":"python","caption":"Step through the example and follow the variable state.","code":["total = 0","for i in range(left - 1, right):","    total += values[i]"],"steps":[{"line":1,"vars":{"total":"0"}},{"line":3,"vars":{"i":"1","values_i":"-2","total":"-2"}},{"line":3,"vars":{"i":"3","values_i":"4","total":"9"},"note":"In [5, -2, 7, 4], l=2 and r=4 select -2, 7, and 4. Zero-based indices 1, 2, 3 produce sum 9; the interval length is r−l+1."}]}
+
       ```
 
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n = data[0]
@@ -452,6 +487,7 @@ topics:
       for index in range(left - 1, right):
           total += data[index + 1]
       print(total)
+
       ```
 
       ### Line-by-line explanation
@@ -466,7 +502,9 @@ topics:
       For [5, -2, 7, 4], change the query to l=r=3. Name the loop’s only index and the value added, then check the full interval l=1, r=n.
 
       ```interactive
+
       {"type":"quiz","caption":"Check your understanding.","questions":[{"question":"Which index corresponds to the 1-based position l?","options":["l","l−1"],"answer":1,"explanation":"Convert a 1-based position to a zero-based index by subtracting one."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -516,12 +554,15 @@ topics:
       For [4, 4, 1, 1, 1, 3], compare index pairs (0,1), (1,2), (2,3), (3,4), (4,5). Three are equal: one 4–4 pair and two 1–1 pairs.
 
       ```interactive
+
       {"type":"trace","lang":"python","caption":"Step through the example and follow the variable state.","code":["equal_pairs = 0","for i in range(n - 1):","    if a[i] == a[i + 1]:","        equal_pairs += 1"],"steps":[{"line":1,"vars":{"equal_pairs":"0"}},{"line":3,"vars":{"i":"0","equal":"true","equal_pairs":"1"}},{"line":3,"vars":{"i":"4","equal":"false","equal_pairs":"3"},"note":"For [4, 4, 1, 1, 1, 3], compare index pairs (0,1), (1,2), (2,3), (3,4), (4,5). Three are equal: one 4–4 pair and two 1–1 pairs."}]}
+
       ```
 
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n = data[0]
@@ -531,6 +572,7 @@ topics:
           if a[i] == a[i + 1]:
               equal_pairs += 1
       print(equal_pairs)
+
       ```
 
       ### Line-by-line explanation
@@ -545,7 +587,9 @@ topics:
       In [4, 4, 1, 1, 1, 3], change the final value to 1. Predict the answer and name the final pair’s indices; explain why this does not count every occurrence of 1.
 
       ```interactive
+
       {"type":"quiz","caption":"Check your understanding.","questions":[{"question":"How many neighboring pairs are in a one-element array?","options":["One","None"],"answer":1,"explanation":"A pair needs two elements, and the array has only one."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -595,12 +639,15 @@ topics:
       For `a = [4, -2, 7, 1]`, `P = [0, 4, 2, 9, 10]`. The sum at zero-based indices 1..3 is `P[4] - P[1] = 10 - 4 = 6`. Negative values need no special handling: they simply reduce a later prefix.
 
       ```interactive
+
       {"type":"algorithm","algorithm":"prefix-sums","caption":"Watch P[i+1] accumulate each value. Visualizer query indices are zero-based and inclusive.","examples":[{"title":"Mixed scores","values":[4,-2,7,1],"queries":[[1,3],[0,2]]},{"title":"Includes negatives","values":[-5,8,-3,6],"queries":[[0,1],[1,3]]}]}
+
       ```
 
       ### Minimal Python example
 
       ```python
+
       import sys
       read = sys.stdin.buffer.readline
       n, q = map(int, read().split())
@@ -613,6 +660,7 @@ topics:
           left, right = map(int, read().split())
           answers.append(str(prefix[right] - prefix[left - 1]))
       sys.stdout.write("\n".join(answers))
+
       ```
 
       ### Read the code line by line
@@ -628,7 +676,9 @@ topics:
       If `values = [3, 0, -2, 5]`, what does the input query `2 4` return? Write the prefix array first, then subtract the two prefix values.
 
       ```interactive
+
       {"type":"quiz","questions":[{"question":"With P[0]=0 and P[i+1]=P[i]+a[i], how do we sum inclusive indices l..r?","options":["P[r]-P[l]","P[r+1]-P[l]","P[r+1]-P[l-1]"],"answer":1,"explanation":"P[k] contains the sum of source indices 0 through k-1."},{"question":"For 1-based inclusive input bounds 2 and 4, which prefix indices are subtracted?","options":["P[4]-P[1]","P[5]-P[2]","P[3]-P[0]"],"answer":0,"explanation":"The requested values are a[1..3], so the prefix indices are 4 and 1."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -684,12 +734,15 @@ topics:
       For values [-3, 4, 7, -2, 5], the oddness indicators are [1, 0, 1, 0, 1] and the prefixes are [0, 1, 1, 2, 2, 3]. Positions 2..5 contain P[5]-P[1]=3-1=2 odd values.
 
       ```interactive
+
       {"type":"algorithm","algorithm":"prefix-sums","caption":"The visualizer receives the transformed 0/1 indicators.","examples":[{"title":"Oddness indicators","values":[1,0,1,0,1],"queries":[[1,4],[0,4]]},{"title":"No odd values","values":[0,0,0],"queries":[[0,2],[1,2]]}]}
+
       ```
 
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n, q = data[0], data[1]
@@ -704,6 +757,7 @@ topics:
           pos += 2
           answers.append(str(prefix[right] - prefix[left - 1]))
       sys.stdout.write("\n".join(answers))
+
       ```
 
       ### Line-by-line explanation
@@ -717,7 +771,9 @@ topics:
       Which indicator is recorded for a negative odd value: 0 or 1? Which prefix is subtracted to answer positions 2..5?
 
       ```interactive
+
       {"type":"quiz","caption":"Check the key formula.","questions":[{"question":"What belongs at the start of the prefix array?","options":["Zero","The first indicator"],"answer":0,"explanation":"The zero prefix makes a range starting at the first position work with the same formula."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -769,12 +825,15 @@ topics:
       For [2, -5, 4, 1, -2, 6] and k=3, the first sum is 1. Next: 1-2+1=0; then 0-(-5)+(-2)=3; last, 3-4+6=5. The maximum is 5.
 
       ```interactive
+
       {"type":"trace","lang":"python","caption":"After shifting, remove the old edge and add the new one.","code":["current += values[right] - values[right - k]","best = max(best, current)"],"steps":[{"line":1,"vars":{"right":"3","current":"0","leaving":"2","entering":"1"},"note":"First shift: 1−2+1=0."},{"line":2,"vars":{"current":"5","best":"5"},"note":"After three shifts, the best sum is 5."}]}
+
       ```
 
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n, k = data[0], data[1]
@@ -787,6 +846,7 @@ topics:
           current += data[offset + right] - data[offset + right - k]
           best = max(best, current)
       print(best)
+
       ```
 
       ### Line-by-line explanation
@@ -801,7 +861,9 @@ topics:
       How does current change when the leaving value is -4 and the entering value is 3? Why does subtracting a negative increase the sum?
 
       ```interactive
+
       {"type":"quiz","caption":"Check the key formula.","questions":[{"question":"Which update shifts a window one position to the right?","options":["Subtract the leaving value and add the entering one","Re-add all k values"],"answer":0,"explanation":"Neighboring windows differ only by their two boundary values."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -853,12 +915,15 @@ topics:
       For each `left`, set `current` to zero. When `right` moves one step, add only `a[right]`. All intervals take O(n²) total time; recomputing each interval from scratch would add another loop and become O(n³).
 
       ```interactive
+
       {"type":"algorithm","algorithm":"enumerate-subarrays","caption":"Compare each current interval with the best sum seen so far.","examples":[{"title":"Best interval is inside","values":[-4,3,-1,5,-7]},{"title":"Every value is negative","values":[-8,-3,-6,-2]}]}
+
       ```
 
       ### Minimal Python example
 
       ```python
+
       values = [5, -8, 6, 2]
       best = values[0]
       for left in range(len(values)):
@@ -868,6 +933,7 @@ topics:
               if current > best:
                   best = current
       print(best)
+
       ```
 
       ### Read the code line by line
@@ -883,7 +949,9 @@ topics:
       For `[-8, -3, -6, -2]`, the best non-empty sum is `-2`, not zero. Which one-element interval produces it?
 
       ```interactive
+
       {"type":"quiz","questions":[{"question":"Which choice is a subarray of [5,-8,6,2]?","options":["[5,6]","[-8,6]","[5,2]"],"answer":1,"explanation":"A subarray contains adjacent source elements."},{"question":"Why is `best = 0` wrong for a non-empty maximum subarray?","options":["The sum may overflow","Zero is not a valid interval when every value is negative","The loop cannot start"],"answer":1,"explanation":"The answer must select at least one value."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -937,12 +1005,15 @@ topics:
       For `[-2, 3, -1, 4, -8]`, at value 3, starting over is better because `3 > -2 + 3`. The next ending sums are 3, 2, and 6. The best interval is indices 1..3, with sum 6.
 
       ```interactive
+
       {"type":"algorithm","algorithm":"kadane","caption":"Blue marks the current element, amber the ending interval, and green the best interval so far.","examples":[{"title":"Interval starts inside","values":[-2,3,-1,4,-8]},{"title":"All values are negative","values":[-7,-3,-5,-4]},{"title":"Equal maximum sums","values":[1,-1,1]}]}
+
       ```
 
       ### Minimal Python example
 
       ```python
+
       values = [-2, 3, -1, 4, -8]
       current = best = values[0]
       start = best_left = best_right = 0
@@ -956,6 +1027,7 @@ topics:
               best = current
               best_left, best_right = start, i
       print(best, best_left + 1, best_right + 1)
+
       ```
 
       ### Read the code line by line
@@ -972,7 +1044,9 @@ topics:
       For `[-7, -3, -5]`, after the second value `best` is `-3`, not `-10`. A one-element interval is allowed, while the empty interval is not.
 
       ```interactive
+
       {"type":"quiz","questions":[{"question":"What information must the local state keep?","options":["Every interval sum","The best sum ending at the previous position","Only the global best"],"answer":1,"explanation":"The next transition only needs the best ending state from the previous position."},{"question":"Why extend when `a[i] == current + a[i]`?","options":["It keeps the smaller left boundary","It makes the algorithm O(n²)","Negative values cannot be skipped"],"answer":0,"explanation":"On equal sums, the existing interval starts earlier."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1027,12 +1101,14 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n = data[0]
       values = data[1:1 + n]
       values.sort()
       sys.stdout.write(" ".join(map(str, values)))
+
       ```
 
       ### Line-by-line explanation
@@ -1046,11 +1122,15 @@ topics:
       For [3, -1, 3, 0], predict the result and the number of 3s; explain why a set would change the answer.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key condition.","questions":[{"question":"What should happen to two equal values after sorting?","options":["Both remain","One is removed"],"answer":0,"explanation":"Sorting changes order, not the multiplicity of values."}]}
+
       ```
 
       ```interactive
+
       {"type":"algorithm","algorithm":"insertion-sort","caption":"This teaching view uses insertion sort; use the standard sort for large inputs.","examples":[{"title":"Four values","values":[5,2,4,1]},{"title":"Duplicates","values":[3,1,3,2]}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1102,6 +1182,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n = data[0]
@@ -1119,6 +1200,7 @@ topics:
           else:
               right = middle - 1
       print(answer)
+
       ```
 
       ### Line-by-line explanation
@@ -1132,11 +1214,15 @@ topics:
       For target=8 in [-4, 1, 3, 7, 9, 12], predict the last non-empty interval and why the answer is -1.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key condition.","questions":[{"question":"What lets us discard the left half?","options":["The midpoint is below the target","The array length is odd"],"answer":0,"explanation":"In a sorted array, all values left of the midpoint are no larger than it."}]}
+
       ```
 
       ```interactive
+
       {"type":"algorithm","algorithm":"binary-search","caption":"The array must be sorted. Follow the bounds and midpoint of the search interval.","examples":[{"title":"Target exists","values":[1,3,4,7,9,12,15],"target":9},{"title":"Target is absent","values":[1,3,4,7,9,12,15],"target":8}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1188,6 +1274,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       from bisect import bisect_left, bisect_right
 
@@ -1201,6 +1288,7 @@ topics:
           pos += 2
           answers.append(str(bisect_right(values, high) - bisect_left(values, low)))
       sys.stdout.write("\n".join(answers))
+
       ```
 
       ### Line-by-line explanation
@@ -1214,7 +1302,9 @@ topics:
       For [-5, -2, -2, 0, 4, 4, 10], predict the counts in [-2,4] and then [5,9]; explain the role of upper_bound.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key condition.","questions":[{"question":"Which position does upper_bound(R) return?","options":["The first value >R","The first value >=R"],"answer":0,"explanation":"It comes after every copy of R, so R remains included in the range."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1268,6 +1358,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n, k = data[0], data[1]
@@ -1292,6 +1383,7 @@ topics:
           else:
               left = middle + 1
       print(left)
+
       ```
 
       ### Line-by-line explanation
@@ -1306,7 +1398,9 @@ topics:
       For [2,3,4,5] and k=2, decide by hand whether capacities 8 and 9 are feasible; name the first feasible one.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key condition.","questions":[{"question":"What happens to feasibility when group capacity increases?","options":["A feasible capacity stays feasible","It becomes infeasible"],"answer":0,"explanation":"Increasing capacity cannot require more groups for the same ordered jobs."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1361,6 +1455,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       from collections import Counter
 
@@ -1368,6 +1463,7 @@ topics:
       n = data[0]
       frequency = Counter(data[1:1 + n])
       print(len(frequency), max(frequency.values()))
+
       ```
 
       ### Line-by-line explanation
@@ -1381,7 +1477,9 @@ topics:
       For [4,4,-2,4,0,-2,9], predict the distinct count and greatest frequency; what information would a set lose?
 
       ```interactive
+
       {"type":"quiz","caption":"Check the structure choice and ordering rule.","questions":[{"question":"What does a set store in a uniqueness task?","options":["Each key once","A count for every key"],"answer":0,"explanation":"A set records whether a key exists, but not its frequency."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1433,6 +1531,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
 
       data = sys.stdin.buffer.read().split()
@@ -1448,6 +1547,7 @@ topics:
               valid = False
               break
       print("YES" if valid and not stack else "NO")
+
       ```
 
       ### Line-by-line explanation
@@ -1461,7 +1561,9 @@ topics:
       Predict the results for `([{}])`, `([)]`, and `((`; name the stack top at the first mismatch.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the structure choice and ordering rule.","questions":[{"question":"In ([)], what fails when ) is read?","options":["The stack top is [","The stack is empty"],"answer":0,"explanation":"The latest opener is [, so ) cannot close it."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1513,6 +1615,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       from collections import deque
 
@@ -1530,6 +1633,7 @@ topics:
           else:
               served.append(str(queue.popleft()))
       print("\n".join(served) if served else "EMPTY")
+
       ```
 
       ### Line-by-line explanation
@@ -1543,7 +1647,9 @@ topics:
       For ADD 10, ADD 20, SERVE, ADD 30, SERVE, SERVE, name the served IDs and the final queue state.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the structure choice and ordering rule.","questions":[{"question":"Which ID leaves first from queue [10,20]?","options":["10","20"],"answer":0,"explanation":"FIFO serves the oldest waiting item."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1597,6 +1703,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       from collections import deque
 
@@ -1619,6 +1726,7 @@ topics:
           else:
               removed.append(str(items.pop()))
       print(" ".join(removed) if removed else "EMPTY")
+
       ```
 
       ### Line-by-line explanation
@@ -1632,7 +1740,9 @@ topics:
       Trace PF 2, PB 5, PF 1, OB, OF, PB 9, OF, OB; predict the removal list.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the structure choice and ordering rule.","questions":[{"question":"Which structure directly supports push and pop at both ends?","options":["Deque","A plain stack"],"answer":0,"explanation":"A deque exposes operations at both the front and back."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1684,6 +1794,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n = data[0]
@@ -1701,6 +1812,7 @@ topics:
           else:
               right -= 1
       print(*answer)
+
       ```
 
       ### Line-by-line explanation
@@ -1714,11 +1826,15 @@ topics:
       For [1,2,4,6,8,10] and target=14, name each checked sum before the match and the 1-based answer.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the pointer movement.","questions":[{"question":"How should the sum change if the endpoint pair is below the target?","options":["Increase the left value","Decrease the right"],"answer":0,"explanation":"Sorted order guarantees the next left value is no smaller."}]}
+
       ```
 
       ```interactive
+
       {"type":"algorithm","algorithm":"two-pointers","caption":"In a sorted array, move only the pointer that can bring the sum closer to the target.","examples":[{"title":"A pair exists","values":[1,2,4,6,8,10],"target":12},{"title":"No pair exists","values":[1,2,4,6,8,10],"target":20}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1770,6 +1886,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n, budget = data[0], data[1]
@@ -1782,6 +1899,7 @@ topics:
               left += 1
           answer += right - left + 1
       print(answer)
+
       ```
 
       ### Line-by-line explanation
@@ -1795,11 +1913,15 @@ topics:
       For [1,2,1,1] with S=3, compute each right-end contribution and the total subarray count.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the pointer movement.","questions":[{"question":"Why can this sum window fail with negative values?","options":["Removing a value may increase the sum","Arrays cannot have negative indices"],"answer":0,"explanation":"Removing a negative number increases the sum, so monotonicity fails."}]}
+
       ```
 
       ```interactive
+
       {"type":"algorithm","algorithm":"sliding-window","caption":"For non-negative values, keep the window sum within the limit and count each valid suffix.","examples":[{"title":"Limit 5","values":[2,1,3,2,1],"threshold":5},{"title":"No positive value fits","values":[3,4,2],"threshold":2}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1853,6 +1975,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n, budget = data[0], data[1]
@@ -1868,6 +1991,7 @@ topics:
           if length > best_length or (length == best_length and length > 0 and left + 1 < best_left):
               best_length, best_left, best_right = length, left + 1, right + 1
       print(best_length, best_left, best_right)
+
       ```
 
       ### Line-by-line explanation
@@ -1881,7 +2005,9 @@ topics:
       For [2,1,3,2,1] with S=5, predict the answer length and bounds; explain the tie rule.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the pointer movement.","questions":[{"question":"What if a single value exceeds the budget?","options":["Advance left past right","Always keep it in the answer"],"answer":0,"explanation":"The current window becomes empty with length zero and cannot be a non-empty answer."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1935,6 +2061,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n, target = data[0], data[1]
@@ -1954,6 +2081,7 @@ topics:
           print(-1)
       else:
           print(best_length, best_left + 1, best_right + 1)
+
       ```
 
       ### Line-by-line explanation
@@ -1967,7 +2095,9 @@ topics:
       For [2,1,3,4,1] and T=7, list the candidate windows while shrinking and predict the final bounds.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the pointer movement.","questions":[{"question":"When should we test whether the interval can shrink?","options":["As soon as sum ≥T","Only after the array ends"],"answer":0,"explanation":"Each valid left boundary may yield a shorter answer for the same right endpoint."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2021,6 +2151,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       n = int(sys.stdin.buffer.read())
       count = total = 0
@@ -2035,6 +2166,7 @@ topics:
                   total += other
           d += 1
       print(count, total)
+
       ```
 
       ### Line-by-line explanation
@@ -2048,7 +2180,9 @@ topics:
       For n=36, list the divisor pairs, the special pair at d=6, and predict the count and sum.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key property.","questions":[{"question":"How many times should d=√n be counted for a perfect square?","options":["Once","Twice"],"answer":0,"explanation":"The two members of the middle divisor pair are the same."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2100,6 +2234,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n = data[0]
@@ -2110,6 +2245,7 @@ topics:
               a, b = b, a % b
           answer = a
       print(answer)
+
       ```
 
       ### Line-by-line explanation
@@ -2123,7 +2259,9 @@ topics:
       For [0,18,30,42], predict answer after each value and show the remainders for (18,30).
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key property.","questions":[{"question":"What is gcd(a,0) for a≥0?","options":["a","Always 0"],"answer":0,"explanation":"Every divisor of a also divides zero; the greatest is a."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2175,6 +2313,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       n = int(sys.stdin.buffer.read())
       is_prime = [True] * (n + 1)
@@ -2188,6 +2327,7 @@ topics:
           p += 1
       primes = [str(i) for i in range(2, n + 1) if is_prime[i]]
       print(" ".join(primes) if primes else "EMPTY")
+
       ```
 
       ### Line-by-line explanation
@@ -2201,11 +2341,15 @@ topics:
       For n=20, name the numbers marked by p=2 and p=3, then predict the final prime list.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key property.","questions":[{"question":"At which multiple does marking start for prime p?","options":["p²","2p"],"answer":0,"explanation":"Every smaller multiple of p already has a smaller prime factor."}]}
+
       ```
 
       ```interactive
+
       {"type":"algorithm","algorithm":"sieve","caption":"Step through the sieve and watch composite numbers get crossed out.","examples":[{"title":"Up to 20","values":[20],"size":20},{"title":"Up to 12","values":[12],"size":12}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2257,6 +2401,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       remaining = int(sys.stdin.buffer.read())
       factors = []
@@ -2275,6 +2420,7 @@ topics:
       for prime, exponent in factors:
           output.extend((str(prime), str(exponent)))
       print(" ".join(output))
+
       ```
 
       ### Line-by-line explanation
@@ -2288,7 +2434,9 @@ topics:
       Factor 360 by repeated prime division and predict k and every prime/exponent pair.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key property.","questions":[{"question":"What does the exponent of prime p represent?","options":["How many times p divides n","p's position in a list"],"answer":0,"explanation":"It is the multiplicity of that prime factor."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2340,6 +2488,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       a, exponent, modulus = map(int, sys.stdin.buffer.read().split())
       base = a % modulus
@@ -2350,6 +2499,7 @@ topics:
           base = base * base % modulus
           exponent //= 2
       print(result)
+
       ```
 
       ### Line-by-line explanation
@@ -2363,7 +2513,9 @@ topics:
       For a=-2, b=5, m=13, trace normalization and exponent bits, then predict the result.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key property.","questions":[{"question":"What is the result when b=0?","options":["1 mod m","Always 0"],"answer":0,"explanation":"Any nonzero base raised to exponent zero is 1."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2415,6 +2567,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       d = list(map(int, sys.stdin.buffer.read().split()))
       n = d[0]
@@ -2428,6 +2581,7 @@ topics:
               last = finish
       print(len(chosen))
       print(" ".join(map(str, chosen)))
+
       ```
 
       ### Line-by-line explanation
@@ -2443,7 +2597,9 @@ topics:
       For [1,3), [2,4), [3,5), [0,6), predict selected original IDs and explain the start=last case.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the greedy rule's property.","questions":[{"question":"Why choose the compatible activity with the earliest finish?","options":["It leaves the most time for later activities","It always starts first","It has the longest duration"],"answer":0,"explanation":"An early finish never removes time from a later compatible activity."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2495,6 +2651,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       d = list(map(int, sys.stdin.buffer.read().split()))
       n = d[0]
@@ -2505,6 +2662,7 @@ topics:
               points.append(right)
       print(len(points))
       print(" ".join(map(str, points)))
+
       ```
 
       ### Line-by-line explanation
@@ -2520,7 +2678,9 @@ topics:
       For [1,4], [2,6], [5,7], [6,9], predict the points and explain why a second point is needed.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the greedy rule's property.","questions":[{"question":"Why is the right endpoint of the earliest uncovered interval safe?","options":["Every cover needs a point no farther right than this endpoint","It covers every interval","All right endpoints are distinct"],"answer":0,"explanation":"Moving a required point to this endpoint still covers the current interval."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2570,6 +2730,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       d = list(map(int, sys.stdin.buffer.read().split()))
       n = d[0]
@@ -2583,6 +2744,7 @@ topics:
           if answer is None or late > answer:
               answer = late
       print(answer)
+
       ```
 
       ### Line-by-line explanation
@@ -2598,7 +2760,9 @@ topics:
       For jobs (3,4), (2,3), (1,8), predict EDD order, completion times, and maximum lateness.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the greedy rule's property.","questions":[{"question":"Which value is compared with deadline d_i?","options":["Completion time C_i","Start time","Previous job duration"],"answer":0,"explanation":"Lateness is C_i−d_i, where C_i is the completion time."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2650,6 +2814,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       d = list(map(int, sys.stdin.buffer.read().split()))
       k, amount = d[0], d[1]
@@ -2659,6 +2824,7 @@ topics:
           count += amount // coin
           amount %= coin
       print(count, amount)
+
       ```
 
       ### Line-by-line explanation
@@ -2674,7 +2840,9 @@ topics:
       For denominations [4,3,1] and amount=6, predict the count and remainder; does this prove optimality?
 
       ```interactive
+
       {"type":"quiz","caption":"Check the greedy rule's property.","questions":[{"question":"For coins 4, 3, 1 and amount 6, what does greedy do and does that prove optimality?","options":["Three coins; no, 3+3 is shorter","Two coins; yes, always optimal","Three; yes, the remainder is zero"],"answer":0,"explanation":"Greedy gives 4+1+1, while 3+3 uses fewer coins."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2726,6 +2894,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       d = list(map(int, sys.stdin.buffer.read().split()))
       n, cost = d[0], d[1:]
@@ -2735,6 +2904,7 @@ topics:
       for i in range(2, n + 1):
           dp[i] = cost[i - 1] + min(dp[i - 1], dp[i - 2])
       print(dp[n])
+
       ```
 
       ### Line-by-line explanation
@@ -2750,7 +2920,9 @@ topics:
       For costs [2,7,3,6,1], compute dp[0..5] and name a route achieving the minimum.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the DP state before coding.","questions":[{"question":"Where can the final jump to step i come from?","options":["i−1 or i−2","Any earlier step","Only i−2"],"answer":0,"explanation":"The allowed jump lengths are one and two."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2800,6 +2972,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       n = int(sys.stdin.buffer.read())
       MOD = 1_000_000_007
@@ -2810,6 +2983,7 @@ topics:
           if i >= 2:
               dp[i] = (dp[i] + dp[i - 2]) % MOD
       print(dp[n])
+
       ```
 
       ### Line-by-line explanation
@@ -2825,11 +2999,15 @@ topics:
       For n=5, write dp[0..5] and explain why dp[0] equals 1.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the DP state before coding.","questions":[{"question":"Why is dp[0] equal to 1?","options":["There is one empty route to the start","The start is unreachable","It is the modulus"],"answer":0,"explanation":"The empty route is the single base for building routes to later positions."}]}
+
       ```
 
       ```interactive
+
       {"type":"algorithm","algorithm":"dp-counting","caption":"Each stair can be reached from one or two steps below; follow the DP table as it fills.","examples":[{"title":"Six stairs","values":[6],"size":6},{"title":"Eight stairs","values":[8],"size":8}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2879,6 +3057,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       d = list(map(int, sys.stdin.buffer.read().split()))
       n, a = d[0], d[1:]
@@ -2887,6 +3066,7 @@ topics:
           current = max(one_back, two_back + x)
           two_back, one_back = one_back, current
       print(one_back)
+
       ```
 
       ### Line-by-line explanation
@@ -2902,7 +3082,9 @@ topics:
       For [4,-1,5,6], predict the two states after each value and the optimal selection.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the DP state before coding.","questions":[{"question":"Which state can be added to a[i] without selecting an adjacent position?","options":["dp[i−2]","dp[i−1]","dp[i]"],"answer":0,"explanation":"After taking i, the previous selection can end no later than i−2."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2952,6 +3134,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       d = list(map(int, sys.stdin.buffer.read().split()))
       k, target = d[0], d[1]
@@ -2977,6 +3160,7 @@ topics:
           answer.sort()
           print(dp[target])
           print(" ".join(map(str, answer)))
+
       ```
 
       ### Line-by-line explanation
@@ -2992,7 +3176,9 @@ topics:
       For coins [1,3,4] and target=6, predict dp[6], prev[6], and the reconstruction sequence.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the DP state before coding.","questions":[{"question":"What must be saved to reconstruct coins for amount x?","options":["The last denomination prev[x]","Only the number of denominations","The sum of earlier states"],"answer":0,"explanation":"prev[x] leads to the earlier state x−prev[x]."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -3042,6 +3228,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       n, k = map(int, sys.stdin.buffer.read().split())
       MOD = 1_000_000_007
@@ -3055,6 +3242,7 @@ topics:
           if i - k >= 0:
               window = (window - ring[(i - k) % (k + 1)] + MOD) % MOD
       print(ring[n % (k + 1)])
+
       ```
 
       ### Line-by-line explanation
@@ -3070,7 +3258,9 @@ topics:
       For n=5,k=2, trace dp[0..5] and window after removing the state that expires.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the DP state before coding.","questions":[{"question":"What does window contain before computing dp[i]?","options":["The sum of the valid previous k states","Every state from 0 to i","Only dp[i−k]"],"answer":0,"explanation":"The transition adds routes from positions i−1 down to max(0,i−k)."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -3121,6 +3311,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n, q = data[0], data[1]
@@ -3135,6 +3326,7 @@ topics:
           pos += 2
           out.append(str(prefix[right] - prefix[left - 1]))
       print("\n".join(out))
+
       ```
 
       ### Explain the code
@@ -3144,7 +3336,9 @@ topics:
       ### Try to predict
 
       ```interactive
+
       {"type":"quiz","caption":"Check the decision before running the code.","questions":[{"question":"How many elements might a direct solution inspect when n=q=200,000?","options":["About 4·10¹⁰","About 4·10⁵","Only 200,000"],"answer":0,"explanation":"In the worst case each of q queries scans nearly n elements: n·q=40,000,000,000."}]}
+
       ```
 
       ### Common mistakes
@@ -3194,6 +3388,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       from collections import defaultdict
       data = list(map(int, sys.stdin.buffer.read().split()))
@@ -3212,6 +3407,7 @@ topics:
           if active > best:
               best, best_day = active, day
       print(best, best_day)
+
       ```
 
       ### Explain the code
@@ -3221,7 +3417,9 @@ topics:
       ### Try to predict
 
       ```interactive
+
       {"type":"quiz","caption":"Check the decision before running the code.","questions":[{"question":"Which events represent an inclusive interval [l,r] in a sweep?","options":["+1 at l and −1 at r+1","+1 at l and −1 at r","−1 at l and +1 at r+1"],"answer":0,"explanation":"The reservation is still active on day r, so it must be removed at the next integer coordinate r+1."}]}
+
       ```
 
       ### Common mistakes
@@ -3271,6 +3469,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n, k = data[0], data[1]
@@ -3289,6 +3488,7 @@ topics:
           else:
               low = capacity + 1
       print(low)
+
       ```
 
       ### Explain the code
@@ -3298,7 +3498,9 @@ topics:
       ### Try to predict
 
       ```interactive
+
       {"type":"quiz","caption":"Check the decision before running the code.","questions":[{"question":"What happens to feasibility when capacity C increases?","options":["It cannot get worse","It always becomes false","It depends on a random check order"],"answer":0,"explanation":"Any grouping that fits in C also fits in a larger capacity, so the predicate is monotone."}]}
+
       ```
 
       ### Common mistakes
@@ -3348,6 +3550,7 @@ topics:
       ### Minimal code example
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n, values = data[0], data[1:]
@@ -3355,6 +3558,7 @@ topics:
       for value in values:
           frequency[value] = frequency.get(value, 0) + 1
       print(len(frequency), max(frequency.values()))
+
       ```
 
       ### Explain the code
@@ -3364,7 +3568,9 @@ topics:
       ### Try to predict
 
       ```interactive
+
       {"type":"quiz","caption":"Check the decision before running the code.","questions":[{"question":"Why can pairwise scanning fail when n=200,000?","options":["It may perform about 2·10¹⁰ comparisons","It loses negative numbers","It requires sorting"],"answer":0,"explanation":"The quadratic comparison count grows roughly as n²/2, which is too large at this size."}]}
+
       ```
 
       ### Common mistakes
@@ -3419,6 +3625,7 @@ topics:
       This Python example reads the entire stream as whitespace-separated numeric tokens, so line breaks do not define record boundaries.
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n, target = data[0], data[1]
@@ -3431,20 +3638,28 @@ topics:
               attempts += 1
               solved += result
       print(solved, attempts)
+
       ```
 
       Input:
+
       ```text
+
       5 2
       1 1
       2 0
       2 1
       2 1
       3 1
+
       ```
+
       Output:
+
       ```text
+
       2 3
+
       ```
 
       ### Line-by-line explanation
@@ -3456,7 +3671,9 @@ topics:
       ### Predict before running
 
       ```interactive
+
       {"type":"quiz","caption":"Choose the next reasoning step.","questions":[{"question":"Why should a thematic session still change the story and input data between attempts?","options":["To test transfer instead of a memorized example","To hide the algorithm name","To change the correct answer after Judge"],"answer":0,"explanation":"A new story keeps the target skill in focus but makes the learner apply it to different data. That tests transfer instead of remembering an answer."}]}
+
       ```
 
       ### Common mistakes
@@ -3512,6 +3729,7 @@ topics:
       This Python example reads the entire stream as whitespace-separated numeric tokens, so line breaks do not define record boundaries.
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n = data[0]
@@ -3520,20 +3738,28 @@ topics:
           topics.add(data[1 + 2 * i])
           points += data[2 + 2 * i]
       print(len(topics), points)
+
       ```
 
       Input:
+
       ```text
+
       5
       3 10
       1 4
       3 6
       2 5
       1 3
+
       ```
+
       Output:
+
       ```text
+
       3 28
+
       ```
 
       ### Line-by-line explanation
@@ -3545,7 +3771,9 @@ topics:
       ### Predict before running
 
       ```interactive
+
       {"type":"quiz","caption":"Choose the next reasoning step.","questions":[{"question":"What first helps distinguish an O(n²) scan from a suitable solution?","options":["Estimate constraints and repeated operations","Choose the shortest code immediately","Copy the numbers from the sample"],"answer":0,"explanation":"Substitute the maximum constraints and estimate the number of repeated operations first. If n² is too large for the limit, look for slower-growing work before writing code."}]}
+
       ```
 
       ### Common mistakes
@@ -3601,6 +3829,7 @@ topics:
       This Python example reads the entire stream as whitespace-separated numeric tokens, so line breaks do not define record boundaries.
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n, deadline = data[0], data[1]
@@ -3611,19 +3840,27 @@ topics:
               score += points
               on_time += 1
       print(score, on_time)
+
       ```
 
       Input:
+
       ```text
+
       4 20
       8 20
       18 40
       21 100
       12 30
+
       ```
+
       Output:
+
       ```text
+
       90 3
+
       ```
 
       ### Line-by-line explanation
@@ -3635,7 +3872,9 @@ topics:
       ### Predict before running
 
       ```interactive
+
       {"type":"quiz","caption":"Choose the next reasoning step.","questions":[{"question":"Why must the problem list be frozen before the timer starts?","options":["So participants do not receive a different set after seeing a statement","So the generator repeats the same task after every submit","So Judge can change limits during the round"],"answer":0,"explanation":"Freezing the set gives every participant the same conditions after the start. Generating a new statement mid-round would make results unfair to compare."}]}
+
       ```
 
       ### Common mistakes
@@ -3691,6 +3930,7 @@ topics:
       This Python example reads the entire stream as whitespace-separated numeric tokens, so line breaks do not define record boundaries.
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n = data[0]
@@ -3704,10 +3944,13 @@ topics:
       else:
           topic = min(errors, key=lambda key: (-errors[key], key))
           print(topic, errors[topic])
+
       ```
 
       Input:
+
       ```text
+
       6
       4 1
       2 0
@@ -3715,10 +3958,15 @@ topics:
       2 1
       4 1
       7 0
+
       ```
+
       Output:
+
       ```text
+
       4 3
+
       ```
 
       ### Line-by-line explanation
@@ -3730,7 +3978,9 @@ topics:
       ### Predict before running
 
       ```interactive
+
       {"type":"quiz","caption":"Choose the next reasoning step.","questions":[{"question":"Why should TLE and WA lead to different learning conclusions?","options":["They may need different next steps: optimization or logic checks","Judge does not return verdicts for them","TLE always means the sample is wrong"],"answer":0,"explanation":"TLE points to runtime and calls for checking complexity or redundant work. WA means the program produced a wrong result, so inspect the logic and boundaries."}]}
+
       ```
 
       ### Common mistakes
@@ -3786,6 +4036,7 @@ topics:
       This Python example reads the entire stream as whitespace-separated numeric tokens, so line breaks do not define record boundaries.
 
       ```python
+
       import sys
       data = list(map(int, sys.stdin.buffer.read().split()))
       n = data[0]
@@ -3796,19 +4047,27 @@ topics:
           if priority > best_score or (priority == best_score and topic < best_topic):
               best_topic, best_score = topic, priority
       print(best_topic, best_score)
+
       ```
 
       Input:
+
       ```text
+
       4
       4 2 7
       2 4 3
       8 1 9
       1 4 2
+
       ```
+
       Output:
+
       ```text
+
       2 11
+
       ```
 
       ### Line-by-line explanation
@@ -3820,7 +4079,9 @@ topics:
       ### Predict before running
 
       ```interactive
+
       {"type":"quiz","caption":"Choose the next reasoning step.","questions":[{"question":"Which evidence best checks that a skill remained after a review interval?","options":["Solving a new problem successfully after a pause","Opening the notes again","Showing the same example once more"],"answer":0,"explanation":"A new problem after a pause checks delayed recall and transfer. Reopening notes or repeating a familiar example does not provide that evidence."}]}
+
       ```
 
       ### Common mistakes

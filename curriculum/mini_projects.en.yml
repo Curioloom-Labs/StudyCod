@@ -50,27 +50,17 @@ courses:
         - Every command has one defined response format.
 
     - key: python-file-backup
-      title: File Backup Tool
-      description: Build a CLI tool that finds files by rules, copies them to a backup directory, and does not fail the whole operation because one file is unavailable.
+      title: "File Backup Verifier"
+      description: "Implement backup_impl.backup_files(source_dir, destination_dir, relative_paths). The function copies the bytes of each available file, preserves its relative path, rejects paths outside the source directory, and continues after a missing file. Do not perform copying when the module is imported."
       estimatedMinutes: 165
-      skills: [pathlib, files, context managers, exceptions]
+      skills: ["pathlib","safe paths","byte-preserving copy","context managers","error handling"]
       requiredTopicKeys: [shlyakhy-ta-fayly-pathlib, fayly-ta-kontekstni-menedzhery, obrobka-vynyatkiv]
-      template: "main.py"
+      template: "main.py\nbackup_impl.py"
+      checkSpec: {"kind":"python-filesystem","module":"backup_impl","function":"backup_files"}
       milestones:
-        - id: scan
-          title: File discovery
-          description: Define selection rules and safe behavior for an empty directory.
-        - id: copy
-          title: Copying
-          description: Copy files to a controlled directory without overwriting unexpected data.
-        - id: errors
-          title: Error handling
-          description: Record problematic files and continue processing available ones.
+        [{"id":"contract","title":"Function contract","description":"Define backup_files(source_dir, destination_dir, relative_paths) in backup_impl.py and specify single-file behavior."},{"id":"copy","title":"Safe copying","description":"Preserve relative paths and file bytes, create parent directories, and reject paths that escape source_dir."},{"id":"recovery","title":"Independent failures","description":"Handle each file error separately so a missing or inaccessible file does not stop other copies."},{"id":"repeatability","title":"Repeatable run","description":"Run the operation again and verify the backup structure and contents remain correct."}]
       acceptanceCriteria:
-        - Paths are built with pathlib and work across operating systems.
-        - A repeated run does not corrupt an existing backup.
-        - An error for one file does not hide results for other files.
-
+        ["Every available requested file is copied byte-for-byte with its relative path preserved.","An absolute path or a path outside source_dir does not write outside destination_dir.","A missing file does not stop copies of other available files.","A repeated run preserves file contents and creates no extra copies."]
     - key: python-product-catalog
       title: Product Catalog
       description: Build a CLI product catalog with a dataclass model, search, filtering, and a stock report.
@@ -275,9 +265,7 @@ courses:
           title: Audit
           description: Write tests for valid form, error, empty list, and requery.
       acceptanceCriteria:
-        - A POST with an invalid name does not change the base.
-        - The session does not contain a password or unnecessary personal data.
-        - Error page does not show traceback to the user.
+        ["A POST with an invalid name does not change the base.","The session does not contain a password or unnecessary personal data.","Error page does not show traceback to the user.","GET /health returns HTTP 200 and JSON with status=ok."]
 
     - key: flask-notes-api
       title: Flask Notes API
@@ -313,9 +301,7 @@ courses:
           title: Contract tests
           description: Check 401, 403, 404, 422 and pagination.
       acceptanceCriteria:
-        - SQL queries are parameterized.
-        - The ownership of the resource is checked on the server.
-        - Tests are run without production secrets.
+        ["SQL queries are parameterized.","The ownership of the resource is checked on the server.","Tests are run without production secrets.","GET /health returns HTTP 200 and JSON with status=ok."]
 
     - key: flask-storefront
       title: Flask Storefront
@@ -339,9 +325,7 @@ courses:
           title: Safe UI
           description: Do not insert untrusted HTML or expose a traceback to users.
       acceptanceCriteria:
-        - An invalid form does not create an order.
-        - An empty catalog has a dedicated state instead of a blank page.
-        - A GET request does not mutate data.
+        ["An invalid form does not create an order.","An empty catalog has a dedicated state instead of a blank page.","A GET request does not mutate data.","GET /health returns HTTP 200 and JSON with status=ok."]
 
     - key: flask-job-board
       title: Background Job Board
@@ -365,9 +349,7 @@ courses:
           title: Retry
           description: Do not create a duplicate for the same idempotency key.
       acceptanceCriteria:
-        - A repeated request does not duplicate an active job.
-        - An exception in a worker becomes failed with a safe message.
-        - Tests do not start a real external queue.
+        ["A repeated request does not duplicate an active job.","An exception in a worker becomes failed with a safe message.","Tests do not start a real external queue.","GET /health returns HTTP 200 and JSON with status=ok."]
 
     - key: flask-operations-console
       title: Flask Operations Console
@@ -391,9 +373,7 @@ courses:
           title: Observability
           description: Add a request id and logging without secrets.
       acceptanceCriteria:
-        - Readiness does not return ready when a critical dependency is unavailable.
-        - Clients receive one error format for 4xx and 5xx responses.
-        - Secrets never appear in logs.
+        ["Readiness does not return ready when a critical dependency is unavailable.","Clients receive one error format for 4xx and 5xx responses.","Secrets never appear in logs.","GET /health returns HTTP 200 and JSON with status=ok."]
 
   fastapi:
     - key: fastapi-reading-log
@@ -436,10 +416,7 @@ courses:
           title: API quality
           description: Add pagination, 401/403/404/409/422 tests, OpenAPI metadata\.
       acceptanceCriteria:
-        - No route accepts an arbitrary dict instead of the described model.
-        - The DB session is closed after each request.
-        - The user cannot read or modify someone else's record.
-        - The tests do not make actual external HTTP requests.
+        ["No route accepts an arbitrary dict instead of the described model.","The DB session is closed after each request.","The user cannot read or modify someone else's record.","The tests do not make actual external HTTP requests.","GET /health returns HTTP 200 and JSON with status=ok."]
 
     - key: fastapi-team-library
       title: FastAPI Team Library
@@ -481,9 +458,7 @@ courses:
           title: Observability
           description: Add request id, structured errors and success/failure metrics.
       acceptanceCriteria:
-        - Unauthorized role gets 403 before state change.
-        - Resubmitting the same job does not create a duplicate.
-        - Background task does not use a closed request session.
+        ["Unauthorized role gets 403 before state change.","Resubmitting the same job does not create a duplicate.","Background task does not use a closed request session.","GET /health returns HTTP 200 and JSON with status=ok."]
 
     - key: fastapi-production-api
       title: FastAPI Production API
@@ -526,10 +501,7 @@ courses:
           title: Deployment
           description: Describe startup, rollback, migrations, logs, and graceful shutdown.
       acceptanceCriteria:
-        - There is no production secret in the repository.
-        - Debug is disabled in the production profile.
-        - Readiness does not return ready when a critical dependency is not
-          available.
+        ["There is no production secret in the repository.","Debug is disabled in the production profile.","Readiness does not return ready when a critical dependency is not available.","GET /health returns HTTP 200 and JSON with status=ok."]
 
     - key: fastapi-upload-center
       title: Upload Center
@@ -553,9 +525,7 @@ courses:
           title: Streaming download
           description: Stream the file and handle a missing resource with HTTPException.
       acceptanceCriteria:
-        - An oversized or forbidden file receives a 4xx response.
-        - A client filename cannot enable path traversal.
-        - Tests do not depend on local production files.
+        ["An oversized or forbidden file receives a 4xx response.","A client filename cannot enable path traversal.","Tests do not depend on local production files.","GET /health returns HTTP 200 and JSON with status=ok."]
 
     - key: fastapi-realtime-feed
       title: Realtime Feed
@@ -579,9 +549,7 @@ courses:
           title: Lifecycle
           description: Handle disconnects, slow clients, and server shutdown.
       acceptanceCriteria:
-        - One disconnected client does not terminate delivery for others.
-        - Events have a valid schema and sequential identifier.
-        - Tests leave no background task after completion.
+        ["One disconnected client does not terminate delivery for others.","Events have a valid schema and sequential identifier.","Tests leave no background task after completion.","GET /health returns HTTP 200 and JSON with status=ok."]
 
   computer-vision:
     - key: cv-document-scanner
@@ -1152,27 +1120,17 @@ courses:
         - A loading error does not leave a partially valid object.
 
     - key: cpp-build-tool
-      title: Build Tool
-      description: Build a small C++ project with several translation units, a custom header, and a reproducible build command.
+      title: "Multi-file C++ Build Tool"
+      description: "Build a multi-file C++ utility that creates a build plan. Handle ADD <relative .cpp path>, REMOVE <path>, REPORT, and EXIT in main.cpp; declare the report function in include/report.hpp and define it in src/report.cpp. Add a CMakeLists.txt with separate translation units. REPORT prints sorted paths and translation_units=N."
       estimatedMinutes: 180
-      skills: [headers, preprocessing, linking, build, diagnostics]
+      skills: ["headers","translation units","namespaces","linking","path validation","CMake"]
       requiredTopicKeys: [zaholovky-ta-kompilyatsiyni-odynytsi, preprotsesor-i-makrosy, skladannya-proyektu-ta-linkuvannya]
-      template: "include/\nsrc/\ntests/\nCMakeLists.txt"
+      template: "main.cpp\nsrc/report.cpp\ninclude/report.hpp\nCMakeLists.txt"
+      checkSpec: {"kind":"cpp-build","requiredFiles":["main.cpp","src/report.cpp","include/report.hpp","CMakeLists.txt"],"requiredFileContents":{"CMakeLists.txt":["add_executable","main.cpp","src/report.cpp","target_include_directories"]}}
       milestones:
-        - id: units
-          title: Translation units
-          description: Separate interface and implementation and remove duplicate symbols.
-        - id: build
-          title: Linking
-          description: Configure a reproducible build and clear diagnostic output.
-        - id: tests
-          title: Build verification
-          description: Add a separate test target and a command.
+        [{"id":"manifest","title":"Manifest commands","description":"Implement ADD, REMOVE, REPORT, and EXIT with path deduplication and .cpp suffix validation."},{"id":"units","title":"Separate translation units","description":"Put the declaration in include/report.hpp, the implementation in src/report.cpp, and calls in main.cpp."},{"id":"build","title":"Reproducible build","description":"Define the executable and include directory in CMakeLists.txt and compile the two source files separately."},{"id":"diagnostics","title":"Diagnostics","description":"Check an empty report, a duplicate path, an unknown path, and an invalid command."}]
       acceptanceCriteria:
-        - A clean build does not depend on local artifacts.
-        - Headers do not create multiple definitions.
-        - A compilation error has a clear problem location.
-
+        ["Judge compiles main.cpp and src/report.cpp as separate translation units and all 15 CLI cases pass.","CMakeLists.txt defines an executable with both source files and the include directory.","Absolute paths, paths escaping through .., and files with another suffix are rejected.","REPORT prints unique paths in lexical order and the correct count."]
     - key: cpp-concurrent-queue
       title: Thread-Safe Queue
       description: Implement a bounded producer/consumer queue, synchronize access, and shut down all threads correctly.

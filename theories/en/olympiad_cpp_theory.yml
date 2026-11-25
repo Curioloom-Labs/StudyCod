@@ -26,19 +26,25 @@ topics:
       For the report below, compilation and execution succeed. Time and memory equal their limits, so neither resource check fails. The outputs differ, which makes the verdict WA.
 
       ```text
+
       1 1 100 100 200 200 0
+
       ```
 
       **Output:**
 
       ```text
+
       WA
+
       ```
 
       If both compilation and execution failed, CE wins because it is checked first. The program never reaches the later checks for that report.
 
       ```interactive
+
       {"type":"quiz","caption":"Apply the priority in order; equality with a limit is allowed.","questions":[{"question":"Compilation and execution succeeded, timeMs equals timeLimitMs, memoryMb equals memoryLimitMb, and outputMatches is 0. What is the verdict?","options":["TLE","MLE","WA"],"answer":2,"explanation":"Both resource measurements are allowed at equality. The answer differs, so the first failing check is WA."},{"question":"The compilation flag and runtime flag are both 0. Which verdict is reported first?","options":["RE","CE","AC"],"answer":1,"explanation":"CE has priority over every later check, including RE."}]}
+
       ```
 
       ### Minimal code example
@@ -46,6 +52,7 @@ topics:
       This complete program applies the same priority to a seven-field report. The simulator’s Judge uses the real execution result; this example teaches how to interpret a report.
 
       ```cpp
+
       #include <iostream>
       #include <string>
       using namespace std;
@@ -70,6 +77,7 @@ topics:
           cout << verdict << '\n';
           return 0;
       }
+
       ```
 
       ### Line-by-line explanation
@@ -125,7 +133,9 @@ topics:
       At n=200,000, n² is 40 billion: a small sample may pass while the largest case exceeds the time limit. An array of n values uses O(n) memory; a few counters use O(1). In C++, use long long before multiplying; two int operands may overflow before assignment.
 
       ```interactive
+
       {"type":"quiz","questions":[{"question":"Which work grows fastest for large n?","options":["n","n log n","n²"],"answer":2,"explanation":"The number of pairs grows quadratically."}]}
+
       ```
 
       ### Minimal code example
@@ -133,6 +143,7 @@ topics:
       This program compares an estimate with a budget; it does not run n² loop iterations.
 
       ```cpp
+
       #include <iostream>
       int main() {
           std::ios::sync_with_stdio(false);
@@ -143,6 +154,7 @@ topics:
           std::cout << (operations <= budget ? "SAFE" : "TOO_SLOW") << std::endl;
           return 0;
       }
+
       ```
 
       ### Line-by-line explanation
@@ -154,7 +166,9 @@ topics:
       For n=1000 the estimate is 1,000,000. An equal budget gives SAFE; 999,999 gives TOO_SLOW.
 
       ```interactive
+
       {"type":"quiz","questions":[{"question":"What is the result for n=1000 and budget=999999?","options":["SAFE","TOO_SLOW","CE"],"answer":1,"explanation":"The estimate exceeds the budget by one."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -202,7 +216,9 @@ topics:
       Generated practice allows up to 2,000,000 values in the range ±10⁹, so the absolute sum is at most 2·10¹⁵ and requires long long. Formatted extraction accepts arbitrary spaces and line breaks. The loop reads each value once and uses O(1) additional memory.
 
       ```interactive
+
       {"type":"quiz","questions":[{"question":"Which type can hold a sum up to 2·10¹⁵?","options":["long long","int","bool"],"answer":0,"explanation":"int does not cover this range."}]}
+
       ```
 
       ### Minimal code example
@@ -210,6 +226,7 @@ topics:
       Formatted extraction through cin skips any amount of whitespace between values.
 
       ```cpp
+
       #include <iostream>
       int main() {
           std::ios::sync_with_stdio(false);
@@ -222,6 +239,7 @@ topics:
           std::cout << sum << std::endl;
           return 0;
       }
+
       ```
 
       ### Line-by-line explanation
@@ -233,7 +251,9 @@ topics:
       For 1000000000, 1000000000, 1000000000, -500000000, the answer is 2500000000. This exceeds the range of `int`, so the accumulator must be `long long`.
 
       ```interactive
+
       {"type":"quiz","questions":[{"question":"What extra memory does one sum accumulator need, independent of n?","options":["O(1)","O(n)","O(n²)"],"answer":0,"explanation":"Only one running total is stored."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -283,12 +303,15 @@ topics:
       For [-3, 0, 4, 2], the first two values leave the state unchanged. After 4, count=1 and total=4; after 2, count=2 and total=6. Each value is checked once.
 
       ```interactive
+
       {"type":"trace","lang":"cpp","caption":"Step through the example and follow the variable state.","code":["count = 0","total = 0","for value in values:","    if value > 0:","        count += 1","        total += value"],"steps":[{"line":1,"vars":{"count":"0","total":"0"}},{"line":4,"vars":{"value":"0","count":"0","total":"0"}},{"line":6,"vars":{"value":"4","count":"1","total":"4"}},{"line":6,"vars":{"value":"2","count":"2","total":"6"},"note":"For [-3, 0, 4, 2], the first two values leave the state unchanged. After 4, count=1 and total=4; after 2, count=2 and total=6. Each value is checked once."}]}
+
       ```
 
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -303,6 +326,7 @@ topics:
           }
           cout << count << ' ' << total << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -317,7 +341,9 @@ topics:
       Replace the final 2 in the example with 0, then with -5. Predict count and total for each change and explain why the condition rejects both values.
 
       ```interactive
+
       {"type":"quiz","caption":"Check your understanding.","questions":[{"question":"Is zero added to the sum of positive values?","options":["Yes","No"],"answer":1,"explanation":"Zero does not satisfy value > 0."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -367,12 +393,15 @@ topics:
       For [-8, -3, -3, -6], the minimum stays -8. The first -3 becomes the maximum with frequency 1; the next raises it to 2; -6 does not change the maximum state.
 
       ```interactive
+
       {"type":"trace","lang":"cpp","caption":"Step through the example and follow the variable state.","code":["minimum = maximum = first","max_count = 1","for value in remaining:","    if value > maximum:","        maximum = value","        max_count = 1","    elif value == maximum:","        max_count += 1"],"steps":[{"line":1,"vars":{"minimum":"-8","maximum":"-8","max_count":"1"}},{"line":4,"vars":{"value":"-3","maximum":"-3","max_count":"1"}},{"line":8,"vars":{"value":"-3","maximum":"-3","max_count":"2"},"note":"For [-8, -3, -3, -6], the minimum stays -8. The first -3 becomes the maximum with frequency 1; the next raises it to 2; -6 does not change the maximum state."}]}
+
       ```
 
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -393,6 +422,7 @@ topics:
           }
           cout << minimum << ' ' << maximum << ' ' << count << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -407,7 +437,9 @@ topics:
       In [-8, -3, -3, -6], replace the final -6 with -3. Predict the minimum, maximum, and frequency, then replace it with -10 and compare which results change.
 
       ```interactive
+
       {"type":"quiz","caption":"Check your understanding.","questions":[{"question":"How should minimum be initialized for a non-empty array?","options":["From the first value","From zero"],"answer":0,"explanation":"The first value exists and may be negative."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -457,12 +489,15 @@ topics:
       In [5, -2, 7, 4], l=2 and r=4 select -2, 7, and 4. Zero-based indices 1, 2, 3 produce sum 9; the interval length is r−l+1.
 
       ```interactive
+
       {"type":"trace","lang":"cpp","caption":"Step through the example and follow the variable state.","code":["total = 0","for i in range(left - 1, right):","    total += values[i]"],"steps":[{"line":1,"vars":{"total":"0"}},{"line":3,"vars":{"i":"1","values_i":"-2","total":"-2"}},{"line":3,"vars":{"i":"3","values_i":"4","total":"9"},"note":"In [5, -2, 7, 4], l=2 and r=4 select -2, 7, and 4. Zero-based indices 1, 2, 3 produce sum 9; the interval length is r−l+1."}]}
+
       ```
 
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -478,6 +513,7 @@ topics:
           for (int i = left - 1; i < right; ++i) sum += a[i];
           cout << sum << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -492,7 +528,9 @@ topics:
       For [5, -2, 7, 4], change the query to l=r=3. Name the loop’s only index and the value added, then check the full interval l=1, r=n.
 
       ```interactive
+
       {"type":"quiz","caption":"Check your understanding.","questions":[{"question":"Which index corresponds to the 1-based position l?","options":["l","l−1"],"answer":1,"explanation":"Convert a 1-based position to a zero-based index by subtracting one."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -542,12 +580,15 @@ topics:
       For [4, 4, 1, 1, 1, 3], compare index pairs (0,1), (1,2), (2,3), (3,4), (4,5). Three are equal: one 4–4 pair and two 1–1 pairs.
 
       ```interactive
+
       {"type":"trace","lang":"cpp","caption":"Step through the example and follow the variable state.","code":["equal_pairs = 0","for i in range(n - 1):","    if a[i] == a[i + 1]:","        equal_pairs += 1"],"steps":[{"line":1,"vars":{"equal_pairs":"0"}},{"line":3,"vars":{"i":"0","equal":"true","equal_pairs":"1"}},{"line":3,"vars":{"i":"4","equal":"false","equal_pairs":"3"},"note":"For [4, 4, 1, 1, 1, 3], compare index pairs (0,1), (1,2), (2,3), (3,4), (4,5). Three are equal: one 4–4 pair and two 1–1 pairs."}]}
+
       ```
 
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -564,6 +605,7 @@ topics:
           }
           cout << equalPairs << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -578,7 +620,9 @@ topics:
       In [4, 4, 1, 1, 1, 3], change the final value to 1. Predict the answer and name the final pair’s indices; explain why this does not count every occurrence of 1.
 
       ```interactive
+
       {"type":"quiz","caption":"Check your understanding.","questions":[{"question":"How many neighboring pairs are in a one-element array?","options":["One","None"],"answer":1,"explanation":"A pair needs two elements, and the array has only one."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -628,12 +672,15 @@ topics:
       For `[4, -2, 7, 1]`, the prefix vector is `[0, 4, 2, 9, 10]`. The sum on zero-based indices 1..3 is `P[4]-P[1]=6`. If input bounds are 1-based and inclusive, the C++ expression is `prefix[right]-prefix[left-1]`.
 
       ```interactive
+
       {"type":"algorithm","algorithm":"prefix-sums","caption":"Select examples and move through each accumulation step. Ranges use zero-based inclusive indices.","examples":[{"title":"Tunnel height changes","values":[4,-2,7,1],"queries":[[1,3],[0,2]]},{"title":"Large values","values":[1000000000,1000000000,-1],"queries":[[0,1],[1,2]]}]}
+
       ```
 
       ### Minimal C++ example
 
       ```cpp
+
       #include <iostream>
       #include <vector>
       using namespace std;
@@ -656,6 +703,7 @@ topics:
           }
           return 0;
       }
+
       ```
 
       ### Read the code line by line
@@ -671,7 +719,9 @@ topics:
       For `[3, 0, -2, 5]`, query `2 4` returns 3. Find `prefix[4]` and `prefix[1]`, then subtract.
 
       ```interactive
+
       {"type":"quiz","questions":[{"question":"Which C++ type fits the largest possible prefix here?","options":["int","long long","char"],"answer":1,"explanation":"A prefix can be around 2×10^14, beyond a 32-bit integer."},{"question":"For 1-based inclusive left and right, which formula is correct?","options":["prefix[right]-prefix[left-1]","prefix[right+1]-prefix[left]","prefix[right]-prefix[left]"],"answer":0,"explanation":"Subtract all values strictly before left."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -727,12 +777,15 @@ topics:
       For values [-3, 4, 7, -2, 5], the oddness indicators are [1, 0, 1, 0, 1] and the prefixes are [0, 1, 1, 2, 2, 3]. Positions 2..5 contain P[5]-P[1]=3-1=2 odd values.
 
       ```interactive
+
       {"type":"algorithm","algorithm":"prefix-sums","caption":"The visualizer receives the transformed 0/1 indicators.","examples":[{"title":"Oddness indicators","values":[1,0,1,0,1],"queries":[[1,4],[0,4]]},{"title":"No odd values","values":[0,0,0],"queries":[[0,2],[1,2]]}]}
+
       ```
 
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -752,6 +805,7 @@ topics:
               cout << prefix[right] - prefix[left - 1] << '\n';
           }
       }
+
       ```
 
       ### Line-by-line explanation
@@ -765,7 +819,9 @@ topics:
       Which indicator is recorded for a negative odd value: 0 or 1? Which prefix is subtracted to answer positions 2..5?
 
       ```interactive
+
       {"type":"quiz","caption":"Check the key formula.","questions":[{"question":"What belongs at the start of the prefix array?","options":["Zero","The first indicator"],"answer":0,"explanation":"The zero prefix makes a range starting at the first position work with the same formula."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -817,12 +873,15 @@ topics:
       For [2, -5, 4, 1, -2, 6] and k=3, the first sum is 1. Next: 1-2+1=0; then 0-(-5)+(-2)=3; last, 3-4+6=5. The maximum is 5.
 
       ```interactive
+
       {"type":"trace","lang":"cpp","caption":"After shifting, remove the old edge and add the new one.","code":["current += values[right] - values[right - k]","best = max(best, current)"],"steps":[{"line":1,"vars":{"right":"3","current":"0","leaving":"2","entering":"1"},"note":"First shift: 1−2+1=0."},{"line":2,"vars":{"current":"5","best":"5"},"note":"After three shifts, the best sum is 5."}]}
+
       ```
 
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -841,6 +900,7 @@ topics:
           }
           cout << best << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -855,7 +915,9 @@ topics:
       How does current change when the leaving value is -4 and the entering value is 3? Why does subtracting a negative increase the sum?
 
       ```interactive
+
       {"type":"quiz","caption":"Check the key formula.","questions":[{"question":"Which update shifts a window one position to the right?","options":["Subtract the leaving value and add the entering one","Re-add all k values"],"answer":0,"explanation":"Neighboring windows differ only by their two boundary values."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -907,12 +969,15 @@ topics:
       For each left boundary, reset `current` to zero. Let the right boundary visit left through n-1. Update the best sum after every addition. `best` starts from a real value, because a non-empty interval is required and every value could be negative.
 
       ```interactive
+
       {"type":"algorithm","algorithm":"enumerate-subarrays","caption":"Amber marks the current interval; green marks the best sum found so far.","examples":[{"title":"Best interval in the middle","values":[-4,3,-1,5,-7]},{"title":"All values negative","values":[-8,-3,-6,-2]}]}
+
       ```
 
       ### Minimal C++ example
 
       ```cpp
+
       #include <iostream>
       #include <vector>
       using namespace std;
@@ -930,6 +995,7 @@ topics:
           cout << best << '\n';
           return 0;
       }
+
       ```
 
       ### Read the code line by line
@@ -946,7 +1012,9 @@ topics:
       For `[-8, -3, -6, -2]`, the answer is `-2`. Why is zero not available? It would correspond to choosing no element.
 
       ```interactive
+
       {"type":"quiz","questions":[{"question":"Which option is not a subarray of [5,-8,6,2]?","options":["[5,-8]","[-8,6]","[5,6]"],"answer":2,"explanation":"The selected values are not adjacent in the source array."},{"question":"How much time does the nested boundary search take when sums are extended incrementally?","options":["O(n)","O(n²)","O(n³)"],"answer":1,"explanation":"There are quadratically many boundary pairs and constant work per extension."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1000,12 +1068,15 @@ topics:
       For `[-2, 3, -1, 4, -8]`, compare `3` with `-2+3`; the new segment begins at 3. Then the ending sums are 3, 2, and 6. The last -8 lowers a candidate but does not change the best interval. The final 1-based answer is `6 2 4`.
 
       ```interactive
+
       {"type":"algorithm","algorithm":"kadane","caption":"Blue marks the current element, amber the local ending segment, and green the best segment.","examples":[{"title":"Mixed values","values":[-2,3,-1,4,-8]},{"title":"All negative","values":[-7,-3,-5,-4]},{"title":"Equal maxima","values":[1,-1,1]}]}
+
       ```
 
       ### Minimal C++ example
 
       ```cpp
+
       #include <iostream>
       #include <vector>
       using namespace std;
@@ -1022,6 +1093,7 @@ topics:
           cout << best << ' ' << bestLeft + 1 << ' ' << bestRight + 1 << '\n';
           return 0;
       }
+
       ```
 
       ### Read the code line by line
@@ -1038,7 +1110,9 @@ topics:
       For `[-7, -3, -5]`, the answer after the second value is `-3`. Why can adding -7 not help the segment ending at -3?
 
       ```interactive
+
       {"type":"quiz","questions":[{"question":"What does the ending state represent?","options":["The largest sum across all prefixes","The best non-empty sum ending at this index","The prefix sum through this index"],"answer":1,"explanation":"This local state decides whether the next element should extend or restart."},{"question":"How does the strict global update resolve equal sums?","options":["It keeps the smallest right boundary, then left","It always chooses the longest interval","It chooses randomly"],"answer":0,"explanation":"A later equal answer does not overwrite the earlier one."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1091,6 +1165,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -1107,6 +1182,7 @@ topics:
           }
           cout << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -1120,11 +1196,15 @@ topics:
       For [3, -1, 3, 0], predict the result and the number of 3s; explain why a set would change the answer.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key condition.","questions":[{"question":"What should happen to two equal values after sorting?","options":["Both remain","One is removed"],"answer":0,"explanation":"Sorting changes order, not the multiplicity of values."}]}
+
       ```
 
       ```interactive
+
       {"type":"algorithm","algorithm":"insertion-sort","caption":"This teaching view uses insertion sort; use the standard sort for large inputs.","examples":[{"title":"Four values","values":[5,2,4,1]},{"title":"Duplicates","values":[3,1,3,2]}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1176,6 +1256,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -1196,6 +1277,7 @@ topics:
           }
           cout << answer << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -1209,11 +1291,15 @@ topics:
       For target=8 in [-4, 1, 3, 7, 9, 12], predict the last non-empty interval and why the answer is -1.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key condition.","questions":[{"question":"What lets us discard the left half?","options":["The midpoint is below the target","The array length is odd"],"answer":0,"explanation":"In a sorted array, all values left of the midpoint are no larger than it."}]}
+
       ```
 
       ```interactive
+
       {"type":"algorithm","algorithm":"binary-search","caption":"The array must be sorted. Follow the bounds and midpoint of the search interval.","examples":[{"title":"Target exists","values":[1,3,4,7,9,12,15],"target":9},{"title":"Target is absent","values":[1,3,4,7,9,12,15],"target":8}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1265,6 +1351,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -1282,6 +1369,7 @@ topics:
               cout << (after - first) << '\n';
           }
       }
+
       ```
 
       ### Line-by-line explanation
@@ -1295,7 +1383,9 @@ topics:
       For [-5, -2, -2, 0, 4, 4, 10], predict the counts in [-2,4] and then [5,9]; explain the role of upper_bound.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key condition.","questions":[{"question":"Which position does upper_bound(R) return?","options":["The first value >R","The first value >=R"],"answer":0,"explanation":"It comes after every copy of R, so R remains included in the range."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1349,6 +1439,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       bool feasible(const vector<long long>& jobs, int k, long long capacity) {
@@ -1379,6 +1470,7 @@ topics:
           }
           cout << low << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -1393,7 +1485,9 @@ topics:
       For [2,3,4,5] and k=2, decide by hand whether capacities 8 and 9 are feasible; name the first feasible one.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key condition.","questions":[{"question":"What happens to feasibility when group capacity increases?","options":["A feasible capacity stays feasible","It becomes infeasible"],"answer":0,"explanation":"Increasing capacity cannot require more groups for the same ordered jobs."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1448,6 +1542,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -1463,6 +1558,7 @@ topics:
           }
           cout << frequency.size() << ' ' << maxFrequency << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -1476,7 +1572,9 @@ topics:
       For [4,4,-2,4,0,-2,9], predict the distinct count and greatest frequency; what information would a set lose?
 
       ```interactive
+
       {"type":"quiz","caption":"Check the structure choice and ordering rule.","questions":[{"question":"What does a set store in a uniqueness task?","options":["Each key once","A count for every key"],"answer":0,"explanation":"A set records whether a key exists, but not its frequency."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1528,6 +1626,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -1551,6 +1650,7 @@ topics:
           }
           cout << (valid && opened.empty() ? "YES" : "NO") << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -1564,7 +1664,9 @@ topics:
       Predict the results for `([{}])`, `([)]`, and `((`; name the stack top at the first mismatch.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the structure choice and ordering rule.","questions":[{"question":"In ([)], what fails when ) is read?","options":["The stack top is [","The stack is empty"],"answer":0,"explanation":"The latest opener is [, so ) cannot close it."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1616,6 +1718,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -1640,6 +1743,7 @@ topics:
           if (served.empty()) cout << "EMPTY\n";
           else for (long long id : served) cout << id << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -1653,7 +1757,9 @@ topics:
       For ADD 10, ADD 20, SERVE, ADD 30, SERVE, SERVE, name the served IDs and the final queue state.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the structure choice and ordering rule.","questions":[{"question":"Which ID leaves first from queue [10,20]?","options":["10","20"],"answer":0,"explanation":"FIFO serves the oldest waiting item."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1707,6 +1813,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -1738,6 +1845,7 @@ topics:
               cout << '\n';
           }
       }
+
       ```
 
       ### Line-by-line explanation
@@ -1751,7 +1859,9 @@ topics:
       Trace PF 2, PB 5, PF 1, OB, OF, PB 9, OF, OB; predict the removal list.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the structure choice and ordering rule.","questions":[{"question":"Which structure directly supports push and pop at both ends?","options":["Deque","A plain stack"],"answer":0,"explanation":"A deque exposes operations at both the front and back."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1803,6 +1913,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -1822,6 +1933,7 @@ topics:
           }
           cout << "-1 -1\n";
       }
+
       ```
 
       ### Line-by-line explanation
@@ -1835,11 +1947,15 @@ topics:
       For [1,2,4,6,8,10] and target=14, name each checked sum before the match and the 1-based answer.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the pointer movement.","questions":[{"question":"How should the sum change if the endpoint pair is below the target?","options":["Increase the left value","Decrease the right"],"answer":0,"explanation":"Sorted order guarantees the next left value is no smaller."}]}
+
       ```
 
       ```interactive
+
       {"type":"algorithm","algorithm":"two-pointers","caption":"In a sorted array, move only the pointer that can bring the sum closer to the target.","examples":[{"title":"A pair exists","values":[1,2,4,6,8,10],"target":12},{"title":"No pair exists","values":[1,2,4,6,8,10],"target":20}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1891,6 +2007,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -1910,6 +2027,7 @@ topics:
           }
           cout << answer << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -1923,11 +2041,15 @@ topics:
       For [1,2,1,1] with S=3, compute each right-end contribution and the total subarray count.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the pointer movement.","questions":[{"question":"Why can this sum window fail with negative values?","options":["Removing a value may increase the sum","Arrays cannot have negative indices"],"answer":0,"explanation":"Removing a negative number increases the sum, so monotonicity fails."}]}
+
       ```
 
       ```interactive
+
       {"type":"algorithm","algorithm":"sliding-window","caption":"For non-negative values, keep the window sum within the limit and count each valid suffix.","examples":[{"title":"Limit 5","values":[2,1,3,2,1],"threshold":5},{"title":"No positive value fits","values":[3,4,2],"threshold":2}]}
+
       ```
 
       ### Common beginner mistakes
@@ -1981,6 +2103,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -2003,6 +2126,7 @@ topics:
           }
           cout << bestLength << ' ' << bestLeft << ' ' << bestRight << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -2016,7 +2140,9 @@ topics:
       For [2,1,3,2,1] with S=5, predict the answer length and bounds; explain the tie rule.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the pointer movement.","questions":[{"question":"What if a single value exceeds the budget?","options":["Advance left past right","Always keep it in the answer"],"answer":0,"explanation":"The current window becomes empty with length zero and cannot be a non-empty answer."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2070,6 +2196,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -2095,6 +2222,7 @@ topics:
           if (bestLength == n + 1) cout << "-1\n";
           else cout << bestLength << ' ' << bestLeft + 1 << ' ' << bestRight + 1 << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -2108,7 +2236,9 @@ topics:
       For [2,1,3,4,1] and T=7, list the candidate windows while shrinking and predict the final bounds.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the pointer movement.","questions":[{"question":"When should we test whether the interval can shrink?","options":["As soon as sum ≥T","Only after the array ends"],"answer":0,"explanation":"Each valid left boundary may yield a shorter answer for the same right endpoint."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2162,6 +2292,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -2178,6 +2309,7 @@ topics:
           }
           cout << count << ' ' << sum << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -2191,7 +2323,9 @@ topics:
       For n=36, list the divisor pairs, the special pair at d=6, and predict the count and sum.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key property.","questions":[{"question":"How many times should d=√n be counted for a perfect square?","options":["Once","Twice"],"answer":0,"explanation":"The two members of the middle divisor pair are the same."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2243,6 +2377,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       long long gcdValue(long long a, long long b) {
@@ -2261,6 +2396,7 @@ topics:
           }
           cout << answer << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -2274,7 +2410,9 @@ topics:
       For [0,18,30,42], predict answer after each value and show the remainders for (18,30).
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key property.","questions":[{"question":"What is gcd(a,0) for a≥0?","options":["a","Always 0"],"answer":0,"explanation":"Every divisor of a also divides zero; the greatest is a."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2326,6 +2464,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -2348,6 +2487,7 @@ topics:
           if (first) cout << "EMPTY";
           cout << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -2361,11 +2501,15 @@ topics:
       For n=20, name the numbers marked by p=2 and p=3, then predict the final prime list.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key property.","questions":[{"question":"At which multiple does marking start for prime p?","options":["p²","2p"],"answer":0,"explanation":"Every smaller multiple of p already has a smaller prime factor."}]}
+
       ```
 
       ```interactive
+
       {"type":"algorithm","algorithm":"sieve","caption":"Step through the sieve and watch composite numbers get crossed out.","examples":[{"title":"Up to 20","values":[20],"size":20},{"title":"Up to 12","values":[12],"size":12}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2417,6 +2561,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -2437,6 +2582,7 @@ topics:
           for (auto [prime, exponent] : factors) cout << ' ' << prime << ' ' << exponent;
           cout << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -2450,7 +2596,9 @@ topics:
       Factor 360 by repeated prime division and predict k and every prime/exponent pair.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key property.","questions":[{"question":"What does the exponent of prime p represent?","options":["How many times p divides n","p's position in a list"],"answer":0,"explanation":"It is the multiplicity of that prime factor."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2502,6 +2650,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -2518,6 +2667,7 @@ topics:
           }
           cout << result << '\n';
       }
+
       ```
 
       ### Line-by-line explanation
@@ -2531,7 +2681,9 @@ topics:
       For a=-2, b=5, m=13, trace normalization and exponent bits, then predict the result.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the algorithm's key property.","questions":[{"question":"What is the result when b=0?","options":["1 mod m","Always 0"],"answer":0,"explanation":"Any nonzero base raised to exponent zero is 1."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2583,10 +2735,12 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main(){ios::sync_with_stdio(false);cin.tie(nullptr);int n;if(!(cin>>n))return 0;vector<tuple<int,int,int>> a;for(int i=1,s,e;i<=n;i++){cin>>s>>e;a.emplace_back(e,s,i);}sort(a.begin(),a.end());
        vector<int> ids;int last=0;bool has=false;for(auto [e,s,id]:a)if(!has||s>=last){ids.push_back(id);last=e;has=true;}cout<<ids.size()<<'\n';for(int i=0;i<(int)ids.size();i++)cout<<(i?" ":"")<<ids[i];cout<<'\n';}
+
       ```
 
       ### Line-by-line explanation
@@ -2602,7 +2756,9 @@ topics:
       For [1,3), [2,4), [3,5), [0,6), predict selected original IDs and explain the start=last case.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the greedy rule's property.","questions":[{"question":"Why choose the compatible activity with the earliest finish?","options":["It leaves the most time for later activities","It always starts first","It has the longest duration"],"answer":0,"explanation":"An early finish never removes time from a later compatible activity."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2654,10 +2810,12 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main(){ios::sync_with_stdio(false);cin.tie(nullptr);int n;if(!(cin>>n))return 0;vector<pair<int,int>> a(n);for(auto& [l,r]:a)cin>>l>>r;sort(a.begin(),a.end(),[](auto x,auto y){return x.second!=y.second?x.second<y.second:x.first<y.first;});
        vector<int> p;for(auto [l,r]:a)if(p.empty()||p.back()<l||p.back()>r)p.push_back(r);cout<<p.size()<<'\n';for(int i=0;i<(int)p.size();i++)cout<<(i?" ":"")<<p[i];cout<<'\n';}
+
       ```
 
       ### Line-by-line explanation
@@ -2673,7 +2831,9 @@ topics:
       For [1,4], [2,6], [5,7], [6,9], predict the points and explain why a second point is needed.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the greedy rule's property.","questions":[{"question":"Why is the right endpoint of the earliest uncovered interval safe?","options":["Every cover needs a point no farther right than this endpoint","It covers every interval","All right endpoints are distinct"],"answer":0,"explanation":"Moving a required point to this endpoint still covers the current interval."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2723,9 +2883,11 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main(){ios::sync_with_stdio(false);cin.tie(nullptr);int n;if(!(cin>>n))return 0;vector<pair<long long,long long>> a(n);for(auto& [d,p]:a)cin>>p>>d;stable_sort(a.begin(),a.end(),[](auto x,auto y){return x.first<y.first;});long long time=0,ans=LLONG_MIN;for(auto [d,p]:a){time+=p;ans=max(ans,time-d);}cout<<ans<<'\n';}
+
       ```
 
       ### Line-by-line explanation
@@ -2741,7 +2903,9 @@ topics:
       For jobs (3,4), (2,3), (1,8), predict EDD order, completion times, and maximum lateness.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the greedy rule's property.","questions":[{"question":"Which value is compared with deadline d_i?","options":["Completion time C_i","Start time","Previous job duration"],"answer":0,"explanation":"Lateness is C_i−d_i, where C_i is the completion time."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2793,9 +2957,11 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main(){ios::sync_with_stdio(false);cin.tie(nullptr);int k;long long amount;if(!(cin>>k>>amount))return 0;vector<long long>a(k);for(auto&c:a)cin>>c;sort(a.rbegin(),a.rend());long long count=0;for(long long c:a){count+=amount/c;amount%=c;}cout<<count<<' '<<amount<<'\n';}
+
       ```
 
       ### Line-by-line explanation
@@ -2811,7 +2977,9 @@ topics:
       For denominations [4,3,1] and amount=6, predict the count and remainder; does this prove optimality?
 
       ```interactive
+
       {"type":"quiz","caption":"Check the greedy rule's property.","questions":[{"question":"For coins 4, 3, 1 and amount 6, what does greedy do and does that prove optimality?","options":["Three coins; no, 3+3 is shorter","Two coins; yes, always optimal","Three; yes, the remainder is zero"],"answer":0,"explanation":"Greedy gives 4+1+1, while 3+3 uses fewer coins."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2863,9 +3031,11 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main(){ios::sync_with_stdio(false);cin.tie(nullptr);int n;if(!(cin>>n))return 0;vector<long long> c(n),dp(n+1);for(auto&x:c)cin>>x;if(n)dp[1]=c[0];for(int i=2;i<=n;i++)dp[i]=c[i-1]+min(dp[i-1],dp[i-2]);cout<<dp[n]<<'\n';}
+
       ```
 
       ### Line-by-line explanation
@@ -2881,7 +3051,9 @@ topics:
       For costs [2,7,3,6,1], compute dp[0..5] and name a route achieving the minimum.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the DP state before coding.","questions":[{"question":"Where can the final jump to step i come from?","options":["i−1 or i−2","Any earlier step","Only i−2"],"answer":0,"explanation":"The allowed jump lengths are one and two."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -2931,9 +3103,11 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main(){ios::sync_with_stdio(false);cin.tie(nullptr);int n;if(!(cin>>n))return 0;const long long M=1000000007;vector<long long>dp(n+1);dp[0]=1;for(int i=1;i<=n;i++){dp[i]=dp[i-1];if(i>=2)dp[i]=(dp[i]+dp[i-2])%M;}cout<<dp[n]<<'\n';}
+
       ```
 
       ### Line-by-line explanation
@@ -2949,11 +3123,15 @@ topics:
       For n=5, write dp[0..5] and explain why dp[0] equals 1.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the DP state before coding.","questions":[{"question":"Why is dp[0] equal to 1?","options":["There is one empty route to the start","The start is unreachable","It is the modulus"],"answer":0,"explanation":"The empty route is the single base for building routes to later positions."}]}
+
       ```
 
       ```interactive
+
       {"type":"algorithm","algorithm":"dp-counting","caption":"Each stair can be reached from one or two steps below; follow the DP table as it fills.","examples":[{"title":"Six stairs","values":[6],"size":6},{"title":"Eight stairs","values":[8],"size":8}]}
+
       ```
 
       ### Common beginner mistakes
@@ -3003,9 +3181,11 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main(){ios::sync_with_stdio(false);cin.tie(nullptr);int n;if(!(cin>>n))return 0;long long a=0,b=0;for(int i=0;i<n;i++){long long x;cin>>x;long long cur=max(b,a+x);a=b;b=cur;}cout<<b<<'\n';}
+
       ```
 
       ### Line-by-line explanation
@@ -3021,7 +3201,9 @@ topics:
       For [4,-1,5,6], predict the two states after each value and the optimal selection.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the DP state before coding.","questions":[{"question":"Which state can be added to a[i] without selecting an adjacent position?","options":["dp[i−2]","dp[i−1]","dp[i]"],"answer":0,"explanation":"After taking i, the previous selection can end no later than i−2."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -3071,9 +3253,11 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main(){ios::sync_with_stdio(false);cin.tie(nullptr);int k,x;if(!(cin>>k>>x))return 0;vector<int> c(k);for(int&v:c)cin>>v;int inf=x+1;vector<int> dp(x+1,inf),prev(x+1);dp[0]=0;for(int v:c)for(int s=v;s<=x;s++)if(dp[s-v]+1<dp[s]){dp[s]=dp[s-v]+1;prev[s]=v;}if(dp[x]==inf){cout<<-1<<'\n';return 0;}vector<int>a;for(int s=x;s>0;s-=prev[s])a.push_back(prev[s]);sort(a.begin(),a.end());cout<<dp[x]<<'\n';for(int i=0;i<(int)a.size();i++){if(i)cout<<' ';cout<<a[i];}cout<<'\n';}
+
       ```
 
       ### Line-by-line explanation
@@ -3089,7 +3273,9 @@ topics:
       For coins [1,3,4] and target=6, predict dp[6], prev[6], and the reconstruction sequence.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the DP state before coding.","questions":[{"question":"What must be saved to reconstruct coins for amount x?","options":["The last denomination prev[x]","Only the number of denominations","The sum of earlier states"],"answer":0,"explanation":"prev[x] leads to the earlier state x−prev[x]."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -3139,9 +3325,11 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main(){ios::sync_with_stdio(false);cin.tie(nullptr);int n,k;if(!(cin>>n>>k))return 0;const long long M=1000000007;vector<long long> r(k+1);r[0]=1;long long w=1;for(int i=1;i<=n;i++){long long cur=w;r[i%(k+1)]=cur;w=(w+cur)%M;if(i-k>=0)w=(w-r[(i-k)%(k+1)]+M)%M;}cout<<r[n%(k+1)]<<'\n';}
+
       ```
 
       ### Line-by-line explanation
@@ -3157,7 +3345,9 @@ topics:
       For n=5,k=2, trace dp[0..5] and window after removing the state that expires.
 
       ```interactive
+
       {"type":"quiz","caption":"Check the DP state before coding.","questions":[{"question":"What does window contain before computing dp[i]?","options":["The sum of the valid previous k states","Every state from 0 to i","Only dp[i−k]"],"answer":0,"explanation":"The transition adds routes from positions i−1 down to max(0,i−k)."}]}
+
       ```
 
       ### Common beginner mistakes
@@ -3208,6 +3398,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -3227,6 +3418,7 @@ topics:
           cout << prefix[right] - prefix[left - 1] << '\n';
         }
       }
+
       ```
 
       ### Explain the code
@@ -3236,7 +3428,9 @@ topics:
       ### Try to predict
 
       ```interactive
+
       {"type":"quiz","caption":"Check the decision before running the code.","questions":[{"question":"How many elements might a direct solution inspect when n=q=200,000?","options":["About 4·10¹⁰","About 4·10⁵","Only 200,000"],"answer":0,"explanation":"In the worst case each of q queries scans nearly n elements: n·q=40,000,000,000."}]}
+
       ```
 
       ### Common mistakes
@@ -3286,6 +3480,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -3308,6 +3503,7 @@ topics:
         }
         cout << best << ' ' << best_day << '\n';
       }
+
       ```
 
       ### Explain the code
@@ -3317,7 +3513,9 @@ topics:
       ### Try to predict
 
       ```interactive
+
       {"type":"quiz","caption":"Check the decision before running the code.","questions":[{"question":"Which events represent an inclusive interval [l,r] in a sweep?","options":["+1 at l and −1 at r+1","+1 at l and −1 at r","−1 at l and +1 at r+1"],"answer":0,"explanation":"The reservation is still active on day r, so it must be removed at the next integer coordinate r+1."}]}
+
       ```
 
       ### Common mistakes
@@ -3367,6 +3565,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -3394,6 +3593,7 @@ topics:
         }
         cout << low << '\n';
       }
+
       ```
 
       ### Explain the code
@@ -3403,7 +3603,9 @@ topics:
       ### Try to predict
 
       ```interactive
+
       {"type":"quiz","caption":"Check the decision before running the code.","questions":[{"question":"What happens to feasibility when capacity C increases?","options":["It cannot get worse","It always becomes false","It depends on a random check order"],"answer":0,"explanation":"Any grouping that fits in C also fits in a larger capacity, so the predicate is monotone."}]}
+
       ```
 
       ### Common mistakes
@@ -3453,6 +3655,7 @@ topics:
       ### Minimal code example
 
       ```cpp
+
       #include <bits/stdc++.h>
       using namespace std;
       int main() {
@@ -3469,6 +3672,7 @@ topics:
         }
         cout << frequency.size() << ' ' << highest << '\n';
       }
+
       ```
 
       ### Explain the code
@@ -3478,7 +3682,9 @@ topics:
       ### Try to predict
 
       ```interactive
+
       {"type":"quiz","caption":"Check the decision before running the code.","questions":[{"question":"Why can pairwise scanning fail when n=200,000?","options":["It may perform about 2·10¹⁰ comparisons","It loses negative numbers","It requires sorting"],"answer":0,"explanation":"The quadratic comparison count grows roughly as n²/2, which is too large at this size."}]}
+
       ```
 
       ### Common mistakes
@@ -3533,6 +3739,7 @@ topics:
       This C++ example disables synchronization with stdio and unties cout from cin to speed up large input.
 
       ```cpp
+
       #include <iostream>
       using namespace std;
       int main() {
@@ -3545,20 +3752,28 @@ topics:
           }
           cout << solved << ' ' << attempts << '\n';
       }
+
       ```
 
       Input:
+
       ```text
+
       5 2
       1 1
       2 0
       2 1
       2 1
       3 1
+
       ```
+
       Output:
+
       ```text
+
       2 3
+
       ```
 
       ### Line-by-line explanation
@@ -3570,7 +3785,9 @@ topics:
       ### Predict before running
 
       ```interactive
+
       {"type":"quiz","caption":"Choose the next reasoning step.","questions":[{"question":"Why should a thematic session still change the story and input data between attempts?","options":["To test transfer instead of a memorized example","To hide the algorithm name","To change the correct answer after Judge"],"answer":0,"explanation":"A new story keeps the target skill in focus but makes the learner apply it to different data. That tests transfer instead of remembering an answer."}]}
+
       ```
 
       ### Common mistakes
@@ -3626,6 +3843,7 @@ topics:
       This C++ example disables synchronization with stdio and unties cout from cin to speed up large input.
 
       ```cpp
+
       #include <iostream>
       #include <unordered_set>
       using namespace std;
@@ -3636,20 +3854,28 @@ topics:
           for (int i = 0; i < n; ++i) { int topic, score; cin >> topic >> score; topics.insert(topic); points += score; }
           cout << topics.size() << ' ' << points << '\n';
       }
+
       ```
 
       Input:
+
       ```text
+
       5
       3 10
       1 4
       3 6
       2 5
       1 3
+
       ```
+
       Output:
+
       ```text
+
       3 28
+
       ```
 
       ### Line-by-line explanation
@@ -3661,7 +3887,9 @@ topics:
       ### Predict before running
 
       ```interactive
+
       {"type":"quiz","caption":"Choose the next reasoning step.","questions":[{"question":"What first helps distinguish an O(n²) scan from a suitable solution?","options":["Estimate constraints and repeated operations","Choose the shortest code immediately","Copy the numbers from the sample"],"answer":0,"explanation":"Substitute the maximum constraints and estimate the number of repeated operations first. If n² is too large for the limit, look for slower-growing work before writing code."}]}
+
       ```
 
       ### Common mistakes
@@ -3717,6 +3945,7 @@ topics:
       This C++ example disables synchronization with stdio and unties cout from cin to speed up large input.
 
       ```cpp
+
       #include <iostream>
       using namespace std;
       int main() {
@@ -3725,19 +3954,27 @@ topics:
           for (int i = 0; i < n; ++i) { int finish, points; cin >> finish >> points; if (finish <= deadline) { score += points; ++onTime; } }
           cout << score << ' ' << onTime << '\n';
       }
+
       ```
 
       Input:
+
       ```text
+
       4 20
       8 20
       18 40
       21 100
       12 30
+
       ```
+
       Output:
+
       ```text
+
       90 3
+
       ```
 
       ### Line-by-line explanation
@@ -3749,7 +3986,9 @@ topics:
       ### Predict before running
 
       ```interactive
+
       {"type":"quiz","caption":"Choose the next reasoning step.","questions":[{"question":"Why must the problem list be frozen before the timer starts?","options":["So participants do not receive a different set after seeing a statement","So the generator repeats the same task after every submit","So Judge can change limits during the round"],"answer":0,"explanation":"Freezing the set gives every participant the same conditions after the start. Generating a new statement mid-round would make results unfair to compare."}]}
+
       ```
 
       ### Common mistakes
@@ -3805,6 +4044,7 @@ topics:
       This C++ example disables synchronization with stdio and unties cout from cin to speed up large input.
 
       ```cpp
+
       #include <iostream>
       #include <map>
       using namespace std;
@@ -3817,10 +4057,13 @@ topics:
               if (count > bestCount) { bestTopic = topic; bestCount = count; }
           cout << bestTopic << ' ' << bestCount << '\n';
       }
+
       ```
 
       Input:
+
       ```text
+
       6
       4 1
       2 0
@@ -3828,10 +4071,15 @@ topics:
       2 1
       4 1
       7 0
+
       ```
+
       Output:
+
       ```text
+
       4 3
+
       ```
 
       ### Line-by-line explanation
@@ -3843,7 +4091,9 @@ topics:
       ### Predict before running
 
       ```interactive
+
       {"type":"quiz","caption":"Choose the next reasoning step.","questions":[{"question":"Why should TLE and WA lead to different learning conclusions?","options":["They may need different next steps: optimization or logic checks","Judge does not return verdicts for them","TLE always means the sample is wrong"],"answer":0,"explanation":"TLE points to runtime and calls for checking complexity or redundant work. WA means the program produced a wrong result, so inspect the logic and boundaries."}]}
+
       ```
 
       ### Common mistakes
@@ -3899,6 +4149,7 @@ topics:
       This C++ example disables synchronization with stdio and unties cout from cin to speed up large input.
 
       ```cpp
+
       #include <iostream>
       using namespace std;
       int main() {
@@ -3911,19 +4162,27 @@ topics:
           }
           cout << bestTopic << ' ' << bestScore << '\n';
       }
+
       ```
 
       Input:
+
       ```text
+
       4
       4 2 7
       2 4 3
       8 1 9
       1 4 2
+
       ```
+
       Output:
+
       ```text
+
       2 11
+
       ```
 
       ### Line-by-line explanation
@@ -3935,7 +4194,9 @@ topics:
       ### Predict before running
 
       ```interactive
+
       {"type":"quiz","caption":"Choose the next reasoning step.","questions":[{"question":"Which evidence best checks that a skill remained after a review interval?","options":["Solving a new problem successfully after a pause","Opening the notes again","Showing the same example once more"],"answer":0,"explanation":"A new problem after a pause checks delayed recall and transfer. Reopening notes or repeating a familiar example does not provide that evidence."}]}
+
       ```
 
       ### Common mistakes

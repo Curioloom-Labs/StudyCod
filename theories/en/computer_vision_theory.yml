@@ -86,7 +86,9 @@ topics:
 
         print(image.min(), image.max())
 
-        ```**Why this is here:** Checking shape, dtype, and range turns
+        ```
+
+        **Why this is here:** Checking shape, dtype, and range turns
         pipeline's invisible assumptions into facts. Before the model, it is
         useful to fix them with a test, rather than relying on one visual
         example.
@@ -100,12 +102,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"What index order does image[y, x] use in NumPy?","options":["First the column, then the row","First row/y, then column/x","Channel number only","The order does not matter"],"answer":1,"explanation":"NumPy indexes the array as row, column, and a channel is added for color."}
 
-        {"type":"prediction","lang":"python","question":"What index order does
-        image[y, x] use in NumPy?","options":["First the column, then the
-        row","First row/y, then column/x","Channel number only","The order does
-        not matter"],"answer":1,"explanation":"NumPy indexes the array as row,
-        column, and a channel is added for color."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What index order does image[y, x] use in NumPy?","options":["First the column, then the row","First row/y, then column/x","Channel number only","The order does not matter"],"answer":1,"explanation":"NumPy indexes the array as row, column, and a channel is added for color."}]}
 
         ```
 
@@ -152,6 +155,7 @@ topics:
 
         if image.ndim != 3 or image.shape[2] != 3:
             raise ValueError('expected RGB image')
+
         ```
 
 
@@ -197,7 +201,10 @@ topics:
 
         if image.ndim != 3 or image.shape[2] != 3:
             raise ValueError('expected RGB image')
-        ```**Why it's here:** The security check makes the format error obvious
+
+        ```
+
+        **Why it's here:** The security check makes the format error obvious
         right after login. Otherwise, the incorrect color may appear only after
         training the model or when checking the result.
 
@@ -210,14 +217,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"Why can't RGB and BGR be passed interchangeably between PIL and OpenCV?","options":["They have different number of pixels","They have a different order of channels","One format is not supported by NumPy","BGR stands for grayscale"],"answer":1,"explanation":"The channel values ​​are the same in content, but their order is different; without conversion, red and blue are swapped."}
 
-        {"type":"prediction","lang":"python","question":"Why can't RGB and BGR
-        be passed interchangeably between PIL and OpenCV?","options":["They have
-        different number of pixels","They have a different order of
-        channels","One format is not supported by NumPy","BGR stands for
-        grayscale"],"answer":1,"explanation":"The channel values ​​are the same
-        in content, but their order is different; without conversion, red and
-        blue are swapped."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Why can't RGB and BGR be passed interchangeably between PIL and OpenCV?","options":["They have different number of pixels","They have a different order of channels","One format is not supported by NumPy","BGR stands for grayscale"],"answer":1,"explanation":"The channel values ​​are the same in content, but their order is different; without conversion, red and blue are swapped."}]}
 
         ```
 
@@ -310,7 +316,9 @@ topics:
 
         assert 0.0 <= ready.min() <= ready.max() <= 1.0
 
-        ```**Why this is here:** The snippet shows two different operations:
+        ```
+
+        **Why this is here:** The snippet shows two different operations:
         changing the geometry and numerical scaling. They need to be tested
         separately, otherwise it's hard to understand why the model is getting
         the wrong result.
@@ -324,14 +332,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"Why should normalization be the same during training and inference?","options":["So that the file takes up less space","So that the model sees the data in the same numerical scale","Because resize works only with float","To automatically correct RGB/BGR"],"answer":1,"explanation":"The model studied dependencies for a specific distribution of values; another preprocessing modifies its input space."}
 
-        {"type":"prediction","lang":"python","question":"Why should
-        normalization be the same during training and inference?","options":["So
-        that the file takes up less space","So that the model sees the data in
-        the same numerical scale","Because resize works only with float","To
-        automatically correct RGB/BGR"],"answer":1,"explanation":"The model
-        studied dependencies for a specific distribution of values; another
-        preprocessing modifies its input space."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Why should normalization be the same during training and inference?","options":["So that the file takes up less space","So that the model sees the data in the same numerical scale","Because resize works only with float","To automatically correct RGB/BGR"],"answer":1,"explanation":"The model studied dependencies for a specific distribution of values; another preprocessing modifies its input space."}]}
 
         ```
 
@@ -420,7 +427,9 @@ topics:
 
         sharpened = cv2.addWeighted(image, 1.5, blurred, -0.5, 0)
 
-        ```**Why this is here:** Saving the result after one filter allows you
+        ```
+
+        **Why this is here:** Saving the result after one filter allows you
         to see what has changed. In the exercise, change the kernel and describe
         the noise-versus-detail trade-off.
 
@@ -433,13 +442,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"What usually happens if you increase the GaussianBlur kernel?","options":["The image becomes sharper without loss","Noise is reduced, but fine detail may be lost","Changing the order of RGB to BGR","Pixels become text"],"answer":1,"explanation":"Stronger antialiasing reduces local fluctuations, but may erase fine edges and textures."}
 
-        {"type":"prediction","lang":"python","question":"What usually happens if
-        you increase the GaussianBlur kernel?","options":["The image becomes
-        sharper without loss","Noise is reduced, but fine detail may be
-        lost","Changing the order of RGB to BGR","Pixels become
-        text"],"answer":1,"explanation":"Stronger antialiasing reduces local
-        fluctuations, but may erase fine edges and textures."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What usually happens if you increase the GaussianBlur kernel?","options":["The image becomes sharper without loss","Noise is reduced, but fine detail may be lost","Changing the order of RGB to BGR","Pixels become text"],"answer":1,"explanation":"Stronger antialiasing reduces local fluctuations, but may erase fine edges and textures."}]}
 
         ```
 
@@ -528,7 +537,9 @@ topics:
 
         print(edges.shape, edges.dtype)
 
-        ```**Why this is here:** The fragment separates grayscale preparation
+        ```
+
+        **Why this is here:** The fragment separates grayscale preparation
         from edge map construction. This makes it possible to change the
         thresholds and see how the number and integrity of the boundaries
         changes.
@@ -542,13 +553,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"What is the output of cv2.Canny in a typical pipeline?","options":["Ready list of recognized objects","Binary map of potential boundaries","Table of RGB values ​​in CSV","Coordinates of only one pixel"],"answer":1,"explanation":"Canny finds changes in intensity; additional steps are required to obtain objects."}
 
-        {"type":"prediction","lang":"python","question":"What is the output of
-        cv2.Canny in a typical pipeline?","options":["Ready list of recognized
-        objects","Binary map of potential boundaries","Table of RGB values ​​in
-        CSV","Coordinates of only one pixel"],"answer":1,"explanation":"Canny
-        finds changes in intensity; additional steps are required to obtain
-        objects."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What is the output of cv2.Canny in a typical pipeline?","options":["Ready list of recognized objects","Binary map of potential boundaries","Table of RGB values ​​in CSV","Coordinates of only one pixel"],"answer":1,"explanation":"Canny finds changes in intensity; additional steps are required to obtain objects."}]}
 
         ```
 
@@ -639,7 +650,9 @@ topics:
 
         mask = cv2.inRange(hsv, lower, upper)
 
-        ```**Why this is here:** foreground_ratio is a simple sanity check: if
+        ```
+
+        **Why this is here:** foreground_ratio is a simple sanity check: if
         the mask is almost all black or white, the pipeline needs to be reviewed
         before contours are found.
 
@@ -652,14 +665,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"Why do you need a binary mask before finding contours?","options":["To describe the foreground and background in the format for the contour algorithm","To automatically name the object class","To restore a damaged JPEG","To change Python to C++"],"answer":0,"explanation":"Contours are usually searched for in the foreground/background representation, not in an arbitrary color photo."}
 
-        {"type":"prediction","lang":"python","question":"Why do you need a
-        binary mask before finding contours?","options":["To describe the
-        foreground and background in the format for the contour algorithm","To
-        automatically name the object class","To restore a damaged JPEG","To
-        change Python to C++"],"answer":0,"explanation":"Contours are usually
-        searched for in the foreground/background representation, not in an
-        arbitrary color photo."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Why do you need a binary mask before finding contours?","options":["To describe the foreground and background in the format for the contour algorithm","To automatically name the object class","To restore a damaged JPEG","To change Python to C++"],"answer":0,"explanation":"Contours are usually searched for in the foreground/background representation, not in an arbitrary color photo."}]}
 
         ```
 
@@ -707,6 +719,7 @@ topics:
             if cv2.contourArea(contour) >= 100:
                 x, y, w, h = cv2.boundingRect(contour)
                 objects.append((x, y, w, h))
+
         ```
 
 
@@ -754,7 +767,10 @@ topics:
             if cv2.contourArea(contour) >= 100:
                 x, y, w, h = cv2.boundingRect(contour)
                 objects.append((x, y, w, h))
-        ```**Why this is here:** Area filtering turns a raw set of contours into
+
+        ```
+
+        **Why this is here:** Area filtering turns a raw set of contours into
         candidates. In the exercise, change the threshold and check which real
         objects disappear by mistake.
 
@@ -767,14 +783,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"Why does the findContours result need to be further filtered?","options":["It always returns exactly one contour","Contours can describe noise or unwanted areas","Contours have no coordinates","To convert them to audio"],"answer":1,"explanation":"The algorithm finds the geometric boundaries of the mask, but does not know the semantics of the desired object."}
 
-        {"type":"prediction","lang":"python","question":"Why does the
-        findContours result need to be further filtered?","options":["It always
-        returns exactly one contour","Contours can describe noise or unwanted
-        areas","Contours have no coordinates","To convert them to
-        audio"],"answer":1,"explanation":"The algorithm finds the geometric
-        boundaries of the mask, but does not know the semantics of the desired
-        object."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Why does the findContours result need to be further filtered?","options":["It always returns exactly one contour","Contours can describe noise or unwanted areas","Contours have no coordinates","To convert them to audio"],"answer":1,"explanation":"The algorithm finds the geometric boundaries of the mask, but does not know the semantics of the desired object."}]}
 
         ```
 
@@ -868,7 +883,9 @@ topics:
 
         features = {'area': area, 'aspect_ratio': aspect_ratio}
 
-        ```**Why this is here:** The snippet shows the complete build →
+        ```
+
+        **Why this is here:** The snippet shows the complete build →
         normalize → compare path. In the exercise, form positive and negative
         pairs and select the threshold based on the data.
 
@@ -881,12 +898,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"What must be consistent for comparing histograms?","options":["File name only","Preprocessing, bins and normalization","Python file size only","Client programming language"],"answer":1,"explanation":"Different bins or scales can change the distance even before the actual similarity assessment."}
 
-        {"type":"prediction","lang":"python","question":"What must be consistent
-        for comparing histograms?","options":["File name only","Preprocessing,
-        bins and normalization","Python file size only","Client programming
-        language"],"answer":1,"explanation":"Different bins or scales can change
-        the distance even before the actual similarity assessment."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What must be consistent for comparing histograms?","options":["File name only","Preprocessing, bins and normalization","Python file size only","Client programming language"],"answer":1,"explanation":"Different bins or scales can change the distance even before the actual similarity assessment."}]}
 
         ```
 
@@ -928,6 +946,7 @@ topics:
 
         if prediction['confidence'] >= 0.8:
             print(prediction['label'], prediction['box'])
+
         ```
 
 
@@ -973,7 +992,10 @@ topics:
 
         if prediction['confidence'] >= 0.8:
             print(prediction['label'], prediction['box'])
-        ```**Why this is here:** Even a simplified detection result has a class,
+
+        ```
+
+        **Why this is here:** Even a simplified detection result has a class,
         score and coordinates. The decision to display or act should not be
         hidden inside the model.
 
@@ -986,13 +1008,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"Which answer best describes segmentation?","options":["One label for the entire frame","Bounding box for each candidate","A mask indicating the ownership of pixels","Average image color only"],"answer":2,"explanation":"Segmentation returns a spatially detailed representation, usually a pixel-level mask."}
 
-        {"type":"prediction","lang":"python","question":"Which answer best
-        describes segmentation?","options":["One label for the entire
-        frame","Bounding box for each candidate","A mask indicating the
-        ownership of pixels","Average image color
-        only"],"answer":2,"explanation":"Segmentation returns a spatially
-        detailed representation, usually a pixel-level mask."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Which answer best describes segmentation?","options":["One label for the entire frame","Bounding box for each candidate","A mask indicating the ownership of pixels","Average image color only"],"answer":2,"explanation":"Segmentation returns a spatially detailed representation, usually a pixel-level mask."}]}
 
         ```
 
@@ -1086,7 +1108,9 @@ topics:
 
         print(classification_report(y_true, y_pred, zero_division=0))
 
-        ```**Why this is here:** Even a simple precision calculation forces you
+        ```
+
+        **Why this is here:** Even a simple precision calculation forces you
         to call what is considered a false positive. In a real assessment,
         include recall, subgroup cuts, and error examples, rather than just one
         number.
@@ -1100,12 +1124,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"What does recall measure?","options":["The proportion of found positive cases among all true positives","Image size in bytes","Average frame brightness","The number of model lines"],"answer":0,"explanation":"Recall shows how many real positive cases the system did not miss."}
 
-        {"type":"prediction","lang":"python","question":"What does recall
-        measure?","options":["The proportion of found positive cases among all
-        true positives","Image size in bytes","Average frame brightness","The
-        number of model lines"],"answer":0,"explanation":"Recall shows how many
-        real positive cases the system did not miss."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What does recall measure?","options":["The proportion of found positive cases among all true positives","Image size in bytes","Average frame brightness","The number of model lines"],"answer":0,"explanation":"Recall shows how many real positive cases the system did not miss."}]}
 
         ```
 
@@ -1132,13 +1157,16 @@ topics:
         For a color BGR image, OpenCV typically has shape `(height, width, 3)` and `uint8` in the range 0–255. Converting to float32 changes the memory and allows normalization, but does not change the number of pixels.
 
         ### Minimal code example
+
         ```python
+
         import numpy as np
 
         image = np.zeros((2, 3, 3), dtype=np.uint8)
         print(image.shape)
         print(image.dtype)
         print(int(image.nbytes))
+
         ```
 
         ### Explanation of each line of the example
@@ -1146,9 +1174,11 @@ topics:
 
         ### Try to predict
         What shape will be in grayscale `(2, 3)`? What will change in nbytes after `.astype(np.float32)`?
+
         ```interactive
 
         {"type":"prediction","lang":"python","question":"What does the third axis `(height, width, 3)` describe?","code":"import numpy as np\n\nimage = np.zeros((2, 3, 3), dtype=np.uint8)\nprint(image.shape)\nprint(image.dtype)\nprint(int(image.nbytes))","options":["Color channels of each pixel","Number of model classes","Number of video frames"],"answer":0,"explanation":"The third axis contains the value of the channels; in BGR, the image has three channels."}
+
         ```
 
         ### How behavior changes
@@ -1158,14 +1188,19 @@ topics:
         confuse width and height; consider RGB instead of BGR; ignore dtype; normalize twice; copy large arrays without memory estimation.
 
         ### In practice
+
         ```python
+
         import numpy as np
 
         image = np.zeros((2, 3, 3), dtype=np.uint8)
         print(image.shape)
         print(image.dtype)
         print(int(image.nbytes))
-        ```**Why this fragment:** The fragment forms the numeric contract on which all subsequent OpenCV operations rely.
+
+        ```
+
+        **Why this fragment:** The fragment forms the numeric contract on which all subsequent OpenCV operations rely.
 
         **What to change yourself:** add shape/dtype checking for grayscale and RGBA and return an understandable error for an empty array.
 
@@ -1232,15 +1267,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"What does the histogram
-        not store?","code":"import cv2\nimport numpy as np\n\ngray =
-        np.array([[0, 0, 100], [100, 200, 255]], dtype=np.uint8)\nhist, _ =
-        np.histogram(gray, bins=4, range=(0,
-        256))\nprint(hist.tolist())","options":["Spatial arrangement of
-        pixels","Number of pixels in bins","Range of
-        intensities"],"answer":0,"explanation":"Histogram compresses the spatial
-        structure to a distribution of values."}
+        {"type":"prediction","lang":"python","question":"What does the histogram not store?","code":"import cv2\nimport numpy as np\n\ngray = np.array([[0, 0, 100], [100, 200, 255]], dtype=np.uint8)\nhist, _ = np.histogram(gray, bins=4, range=(0, 256))\nprint(hist.tolist())","options":["Spatial arrangement of pixels","Number of pixels in bins","Range of intensities"],"answer":0,"explanation":"Histogram compresses the spatial structure to a distribution of values."}
 
         ```
 
@@ -1271,7 +1298,9 @@ topics:
 
         print(hist.tolist())
 
-        ```**Why this snippet:** the small array allows you to manually check
+        ```
+
+        **Why this snippet:** the small array allows you to manually check
         each bin and understand exactly what is being measured.
 
         **What to change yourself:** make two matrices with the same histogram,
@@ -1347,16 +1376,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"What combination
-        removes the small light noise?","code":"import cv2\nimport numpy as
-        np\n\nmask = np.array([[0, 255, 0], [255, 255, 255], [0, 255, 0]],
-        dtype=np.uint8)\nkernel = np.ones((3, 3), dtype=np.uint8)\neroded =
-        cv2.erode(mask, kernel,
-        iterations=1)\nprint(int(eroded.sum()))","options":["Opening: erosion
-        then dilation","Only changing the color space","Increase JPEG
-        quality"],"answer":0,"explanation":"Opening first removes small areas of
-        erosion, and then returns the shape of the main dilation objects."}
+        {"type":"prediction","lang":"python","question":"What combination removes the small light noise?","code":"import cv2\nimport numpy as np\n\nmask = np.array([[0, 255, 0], [255, 255, 255], [0, 255, 0]], dtype=np.uint8)\nkernel = np.ones((3, 3), dtype=np.uint8)\neroded = cv2.erode(mask, kernel, iterations=1)\nprint(int(eroded.sum()))","options":["Opening: erosion then dilation","Only changing the color space","Increase JPEG quality"],"answer":0,"explanation":"Opening first removes small areas of erosion, and then returns the shape of the main dilation objects."}
 
         ```
 
@@ -1388,7 +1408,9 @@ topics:
 
         print(int(eroded.sum()))
 
-        ```**Why this snippet:** a small mask makes the causal relationship
+        ```
+
+        **Why this snippet:** a small mask makes the causal relationship
         between neighborhood and area change visible without a complex model.
 
         **What to change yourself:** compare the opening and closing on the mask
@@ -1467,17 +1489,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"What is a typical
-        limitation of template matching?","code":"import cv2\nimport numpy as
-        np\n\nimage = np.zeros((20, 20), dtype=np.uint8)\ntemplate = np.ones((3,
-        3), dtype=np.uint8) * 255\nimage[8:11, 12:15] = template\nresult =
-        cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)\n_, score, _,
-        point = cv2.minMaxLoc(result)\nprint(round(float(score), 2),
-        point)","options":["Sensitivity to scale, rotation and
-        lighting","Absence of any numerical score","Unable to work with
-        NumPy"],"answer":0,"explanation":"Pixel-level comparison does not have
-        the invariance of a more complex model."}
+        {"type":"prediction","lang":"python","question":"What is a typical limitation of template matching?","code":"import cv2\nimport numpy as np\n\nimage = np.zeros((20, 20), dtype=np.uint8)\ntemplate = np.ones((3, 3), dtype=np.uint8) * 255\nimage[8:11, 12:15] = template\nresult = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)\n_, score, _, point = cv2.minMaxLoc(result)\nprint(round(float(score), 2), point)","options":["Sensitivity to scale, rotation and lighting","Absence of any numerical score","Unable to work with NumPy"],"answer":0,"explanation":"Pixel-level comparison does not have the invariance of a more complex model."}
 
         ```
 
@@ -1513,7 +1525,9 @@ topics:
 
         print(round(float(score), 2), point)
 
-        ```**Why this fragment:** synthetic example makes the coordinates and
+        ```
+
+        **Why this fragment:** synthetic example makes the coordinates and
         score reproducible, and not dependent on a random photo.
 
         **What to change yourself:** add a negative frame, change the lighting
@@ -1590,15 +1604,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"What is important to
-        complete a video stream?","code":"import cv2\n\ncap =
-        cv2.VideoCapture(\"sample.mp4\")\nframes = 0\nwhile frames < 3:\n    ok,
-        frame = cap.read()\n    if not ok:\n        break\n    frames +=
-        1\ncap.release()\nprint(frames)","options":["Check success/read and
-        release capture","Always wait for an infinite loop","Store all frames in
-        RAM"],"answer":0,"explanation":"Resource state can change, so the loop
-        and resource cleanup must be explicit."}
+        {"type":"prediction","lang":"python","question":"What is important to complete a video stream?","code":"import cv2\n\ncap = cv2.VideoCapture(\"sample.mp4\")\nframes = 0\nwhile frames < 3:\n    ok, frame = cap.read()\n    if not ok:\n        break\n    frames += 1\ncap.release()\nprint(frames)","options":["Check success/read and release capture","Always wait for an infinite loop","Store all frames in RAM"],"answer":0,"explanation":"Resource state can change, so the loop and resource cleanup must be explicit."}
 
         ```
 
@@ -1633,7 +1639,9 @@ topics:
 
         print(frames)
 
-        ```**Why this fragment:** The fragment with a limit of three frames is
+        ```
+
+        **Why this fragment:** The fragment with a limit of three frames is
         deterministic and shows a lifecycle without dependence on an infinite
         live server.
 
@@ -1708,16 +1716,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"What does the status do
-        in the tracking result?","code":"import numpy as np\n\nold =
-        np.array([[[10., 10.]], [[20., 10.]]], dtype=np.float32)\nnew = old +
-        np.array([[[2., 1.]], [[2., 1.]]], dtype=np.float32)\nstatus =
-        np.array([[1], [0]], dtype=np.uint8)\ntracked = new[status.ravel() ==
-        1]\nprint(tracked.reshape(-1, 2).tolist())","options":["Indicates which
-        motion estimates can be used","Changes BGR to RGB","Describes the object
-        class"],"answer":0,"explanation":"Status is the validity of a single
-        tracked point, not a semantic label."}
+        {"type":"prediction","lang":"python","question":"What does the status do in the tracking result?","code":"import numpy as np\n\nold = np.array([[[10., 10.]], [[20., 10.]]], dtype=np.float32)\nnew = old + np.array([[[2., 1.]], [[2., 1.]]], dtype=np.float32)\nstatus = np.array([[1], [0]], dtype=np.uint8)\ntracked = new[status.ravel() == 1]\nprint(tracked.reshape(-1, 2).tolist())","options":["Indicates which motion estimates can be used","Changes BGR to RGB","Describes the object class"],"answer":0,"explanation":"Status is the validity of a single tracked point, not a semantic label."}
 
         ```
 
@@ -1749,7 +1748,9 @@ topics:
 
         print(tracked.reshape(-1, 2).tolist())
 
-        ```**Why this fragment:** artificial coordinates allow you to check the
+        ```
+
+        **Why this fragment:** artificial coordinates allow you to check the
         validity mask before connecting real video.
 
         **What to change yourself:** add a minimum threshold for the number of
@@ -1822,17 +1823,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"Why do you need
-        different angles of the chessboard?","code":"import numpy as
-        np\n\nobject_points = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]],
-        dtype=np.float32)\nimage_points = np.array([[10, 10], [20, 10], [10,
-        20]], dtype=np.float32)\nprint(object_points.shape,
-        image_points.shape)","options":["So that the parameters were determined
-        by various geometrical observations","To increase the brightness of the
-        image","To replace distortion with
-        segmentation"],"answer":0,"explanation":"Uniform correspondences give a
-        weakly defined model and are poorly generalizable."}
+        {"type":"prediction","lang":"python","question":"Why do you need different angles of the chessboard?","code":"import numpy as np\n\nobject_points = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=np.float32)\nimage_points = np.array([[10, 10], [20, 10], [10, 20]], dtype=np.float32)\nprint(object_points.shape, image_points.shape)","options":["So that the parameters were determined by various geometrical observations","To increase the brightness of the image","To replace distortion with segmentation"],"answer":0,"explanation":"Uniform correspondences give a weakly defined model and are poorly generalizable."}
 
         ```
 
@@ -1861,7 +1852,9 @@ topics:
 
         print(object_points.shape, image_points.shape)
 
-        ```**Why exactly this fragment:** controlled arrays form the right
+        ```
+
+        **Why exactly this fragment:** controlled arrays form the right
         thinking about correspondence to the complex OpenCV API.
 
         **What to change yourself:** generate a synthetic distortion, build an
@@ -1936,15 +1929,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"What array does the horizontal flip produce?","code":"import numpy as np\nimage = np.array([[1, 2], [3, 4]])\nflipped = np.fliplr(image)\nprint(flipped.tolist())","options":["[[2, 1], [4, 3]]","[[3, 4], [1, 2]]","[[1, 2], [3, 4]]"],"answer":0,"explanation":"A horizontal flip reverses the column order within each row."}
 
-        {"type":"prediction","lang":"python","question":"What can not be done
-        with the test set?","code":"import cv2\nimport numpy as np\n\nimage =
-        np.arange(9, dtype=np.uint8).reshape(3, 3)\nflipped = cv2.flip(image,
-        1)\nprint(flipped.tolist())","options":["Select augmentation/threshold
-        on his answers and then call the assessment independent","Check the
-        final quality once","Keep it separate from
-        train"],"answer":0,"explanation":"The test set must remain independent
-        for fair evaluation of generalization."}
+        ```
+
+        ```interactive
+
+        {"type":"spot-the-bug","lang":"python","question":"Which line uses the held-out test set to tune a decision threshold?","lines":["best_threshold = thresholds[0]","best_score = -1.0","for threshold in thresholds:","    score = evaluate(test_images, test_labels, threshold)","    if score > best_score:","        best_score = score","        best_threshold = threshold"],"buggyLine":4,"explanation":"Choose the threshold on validation data, then evaluate the selected threshold once on the untouched test set."}
 
         ```
 
@@ -1973,7 +1964,9 @@ topics:
 
         print(flipped.tolist())
 
-        ```**Why this fragment:** flip demonstrates that image transform changes
+        ```
+
+        **Why this fragment:** flip demonstrates that image transform changes
         not only pixels, but also geometric labels.
 
         **What to change yourself:** implement a box transformation for flip and
@@ -2052,18 +2045,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"What should batch do
-        with broken input?","code":"from pathlib import Path\n\nfiles =
-        sorted(Path(\"samples\").glob(\"*.png\"))\nsummary = {\"processed\": 0,
-        \"failed\": 0}\nfor path in files:\n    try:\n        if
-        path.stat().st_size == 0:\n            raise ValueError(\"empty
-        file\")\n        summary[\"processed\"] += 1\n    except (OSError,
-        ValueError):\n        summary[\"failed\"] +=
-        1\nprint(summary)","options":["Record the file as failed and continue if
-        the policy allows it","Silently mark it as processed","Delete all batch
-        results"],"answer":0,"explanation":"Error isolation and an explicit
-        summary make the pipeline manageable."}
+        {"type":"prediction","lang":"python","question":"What should batch do with broken input?","code":"from pathlib import Path\n\nfiles = sorted(Path(\"samples\").glob(\"*.png\"))\nsummary = {\"processed\": 0, \"failed\": 0}\nfor path in files:\n    try:\n        if path.stat().st_size == 0:\n            raise ValueError(\"empty file\")\n        summary[\"processed\"] += 1\n    except (OSError, ValueError):\n        summary[\"failed\"] += 1\nprint(summary)","options":["Record the file as failed and continue if the policy allows it","Silently mark it as processed","Delete all batch results"],"answer":0,"explanation":"Error isolation and an explicit summary make the pipeline manageable."}
 
         ```
 
@@ -2098,7 +2080,9 @@ topics:
                 summary["failed"] += 1
         print(summary)
 
-        ```**Why exactly this fragment:** the example teaches to build a quality
+        ```
+
+        **Why exactly this fragment:** the example teaches to build a quality
         gate around the CV, and not to consider the mere fact of the absence of
         a crash as a success.
 

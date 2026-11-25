@@ -41,6 +41,7 @@ topics:
 
         def hello(name):
             return {'message': f'Hello, {name}!'}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -87,6 +88,7 @@ topics:
 
         def hello(name):
             return {'message': f'Hello, {name}!'}
+
         ```
 
         **Навіщо саме це тут:** Тест через app.test_client() перевіряє справжню
@@ -102,14 +104,7 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Який результат матиме
-        GET-запит до /hello/Ada?","code":"@app.get('/hello/<name>')\ndef
-        hello(name):\n    return {'message': f'Hello,
-        {name}!'}\n","options":["JSON із message = 'Hello, Ada!'","Текст буде
-        надрукований лише в терміналі","404, бо маршрут містить кутові
-        дужки","Помилка, бо name має бути
-        числом"],"answer":0,"explanation":"<name> — змінна частина маршруту, а
-        Flask передає її у функцію як рядок."}
+        {"type":"prediction","lang":"python","question":"Який результат матиме GET-запит до /hello/Ada?","code":"@app.get('/hello/<name>')\ndef hello(name):\n    return {'message': f'Hello, {name}!'}\n","options":["JSON із message = 'Hello, Ada!'","Текст буде надрукований лише в терміналі","404, бо маршрут містить кутові дужки","Помилка, бо name має бути числом"],"answer":0,"explanation":"<name> — змінна частина маршруту, а Flask передає її у функцію як рядок."}
 
         ```
 
@@ -160,6 +155,7 @@ topics:
             if not query:
                 return {'error': 'q is required'}, 400
             return {'query': query}, 200
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -209,6 +205,7 @@ topics:
             if not query:
                 return {'error': 'q is required'}, 400
             return {'query': query}, 200
+
         ```
 
         **Навіщо саме це тут:** Послідовність «прочитати → нормалізувати →
@@ -224,14 +221,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Який статус має
-        повернути приклад, якщо q відсутній або порожній?","code":"query =
-        request.args.get('q', '').strip()\nif not query:\n    return {'error':
-        'q is required'}, 400\n","options":["200, бо endpoint технічно
-        запустився","201, бо створюється пошук","400, бо клієнт не надав
-        потрібний параметр","500, бо будь-яка відсутність даних є помилкою
-        сервера"],"answer":2,"explanation":"Запит дійшов до сервера, але не
-        містить даних, потрібних для операції; це помилка клієнтського запиту."}
+        {"type":"prediction","lang":"python","question":"Який статус має повернути приклад, якщо q відсутній або порожній?","options":["200, бо endpoint технічно запустився","201, бо створюється пошук","400, бо клієнт не надав потрібний параметр","500, бо будь-яка відсутність даних є помилкою сервера"],"answer":2,"code":"query = request.args.get('q', '').strip()\nif not query:\n    return {'error': 'q is required'}, 400\n","explanation":"Запит дійшов до сервера, але не містить даних, потрібних для операції; це помилка клієнтського запиту."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Який статус має повернути приклад, якщо q відсутній або порожній?","options":["200, бо endpoint технічно запустився","201, бо створюється пошук","400, бо клієнт не надав потрібний параметр","500, бо будь-яка відсутність даних є помилкою сервера"],"answer":2,"code":"query = request.args.get('q', '').strip()\nif not query:\n    return {'error': 'q is required'}, 400\n","explanation":"Запит дійшов до сервера, але не містить даних, потрібних для операції; це помилка клієнтського запиту."}]}
 
         ```
 
@@ -279,6 +275,7 @@ topics:
 
         def profile(name):
             return render_template('profile.html', name=name)
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -325,6 +322,7 @@ topics:
 
         def profile(name):
             return render_template('profile.html', name=name)
+
         ```
 
         **Навіщо саме це тут:** Шаблон відповідає за розмітку, а Python — за
@@ -340,12 +338,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Де має лежати
-        profile.html для render_template('profile.html', ...)?","options":["У
-        каталозі templates","У каталозі static","У корені операційної
-        системи","У базі даних"],"answer":0,"explanation":"Flask шукає
-        Jinja-шаблони в templates; static призначений для незмінених CSS, JS і
-        медіа."}
+        {"type":"prediction","lang":"python","question":"Де має лежати profile.html для render_template('profile.html', ...)?","options":["У каталозі templates","У каталозі static","У корені операційної системи","У базі даних"],"answer":0,"explanation":"Flask шукає Jinja-шаблони в templates; static призначений для незмінених CSS, JS і медіа."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Де має лежати profile.html для render_template('profile.html', ...)?","options":["У каталозі templates","У каталозі static","У корені операційної системи","У базі даних"],"answer":0,"explanation":"Flask шукає Jinja-шаблони в templates; static призначений для незмінених CSS, JS і медіа."}]}
 
         ```
 
@@ -396,6 +395,7 @@ topics:
             if '@' not in email:
                 return {'error': 'invalid email'}, 422
             return {'ok': True}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -447,6 +447,7 @@ topics:
             if '@' not in email:
                 return {'error': 'invalid email'}, 422
             return {'ok': True}
+
         ```
 
         **Навіщо саме це тут:** Фрагмент показує межу між отриманням даних і
@@ -463,13 +464,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Чому серверна перевірка
-        потрібна навіть після HTML-валидації форми?","options":["Браузер завжди
-        надсилає дані двічі","Клієнтський код можна обійти або підмінити","Flask
-        не вміє читати форми без неї","Валідація потрібна лише для красивих
-        повідомлень"],"answer":1,"explanation":"Будь-хто може надіслати запит
-        напряму, минаючи браузер, тому довіряти можна лише перевіркам на
-        сервері."}
+        {"type":"prediction","lang":"python","question":"Чому серверна перевірка потрібна навіть після HTML-валидації форми?","options":["Браузер завжди надсилає дані двічі","Клієнтський код можна обійти або підмінити","Flask не вміє читати форми без неї","Валідація потрібна лише для красивих повідомлень"],"answer":1,"explanation":"Будь-хто може надіслати запит напряму, минаючи браузер, тому довіряти можна лише перевіркам на сервері."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Чому серверна перевірка потрібна навіть після HTML-валидації форми?","options":["Браузер завжди надсилає дані двічі","Клієнтський код можна обійти або підмінити","Flask не вміє читати форми без неї","Валідація потрібна лише для красивих повідомлень"],"answer":1,"explanation":"Будь-хто може надіслати запит напряму, минаючи браузер, тому довіряти можна лише перевіркам на сервері."}]}
 
         ```
 
@@ -519,6 +520,7 @@ topics:
 
         def status():
             return {'ok': True, 'checked_at': datetime.now(UTC).isoformat()}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -566,6 +568,7 @@ topics:
 
         def status():
             return {'ok': True, 'checked_at': datetime.now(UTC).isoformat()}
+
         ```
 
         **Навіщо саме це тут:** Публічний payload формується явно, тому зміна
@@ -581,12 +584,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Чому datetime
-        перетворюють на ISO-рядок перед JSON-відповіддю?","options":["JSON має
-        вбудований тип datetime","Клієнту потрібне однозначне текстове
-        представлення дати","Щоб приховати дату від клієнта","Python не вміє
-        зберігати datetime"],"answer":1,"explanation":"JSON має обмежений набір
-        типів; ISO-8601 є поширеним і явним контрактом для дати та часу."}
+        {"type":"prediction","lang":"python","question":"Чому datetime перетворюють на ISO-рядок перед JSON-відповіддю?","options":["JSON має вбудований тип datetime","Клієнту потрібне однозначне текстове представлення дати","Щоб приховати дату від клієнта","Python не вміє зберігати datetime"],"answer":1,"explanation":"JSON має обмежений набір типів; ISO-8601 є поширеним і явним контрактом для дати та часу."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Чому datetime перетворюють на ISO-рядок перед JSON-відповіддю?","options":["JSON має вбудований тип datetime","Клієнту потрібне однозначне текстове представлення дати","Щоб приховати дату від клієнта","Python не вміє зберігати datetime"],"answer":1,"explanation":"JSON має обмежений набір типів; ISO-8601 є поширеним і явним контрактом для дати та часу."}]}
 
         ```
 
@@ -636,6 +640,7 @@ topics:
         def login():
             session['user_id'] = 42
             return {'logged_in': True}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -684,6 +689,7 @@ topics:
         def login():
             session['user_id'] = 42
             return {'logged_in': True}
+
         ```
 
         **Навіщо саме це тут:** У фрагменті сесія лише переносить ідентичність
@@ -699,12 +705,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що найкраще зберігати в
-        cookie-based сесії після входу?","options":["Пароль у відкритому
-        вигляді","Увесь об'єкт користувача з персональними даними","Мінімальний
-        ідентифікатор або необхідні claims","Результат SQL-запиту без обмеження
-        розміру"],"answer":2,"explanation":"Сесія має переносити мінімальний
-        стан; секрети й великі внутрішні об'єкти там зберігати не слід."}
+        {"type":"prediction","lang":"python","question":"Що найкраще зберігати в cookie-based сесії після входу?","options":["Пароль у відкритому вигляді","Увесь об'єкт користувача з персональними даними","Мінімальний ідентифікатор або необхідні claims","Результат SQL-запиту без обмеження розміру"],"answer":2,"explanation":"Сесія має переносити мінімальний стан; секрети й великі внутрішні об'єкти там зберігати не слід."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що найкраще зберігати в cookie-based сесії після входу?","options":["Пароль у відкритому вигляді","Увесь об'єкт користувача з персональними даними","Мінімальний ідентифікатор або необхідні claims","Результат SQL-запиту без обмеження розміру"],"answer":2,"explanation":"Сесія має переносити мінімальний стан; секрети й великі внутрішні об'єкти там зберігати не слід."}]}
 
         ```
 
@@ -755,6 +762,7 @@ topics:
             app = Flask(__name__)
             app.register_blueprint(api)
             return app
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -803,6 +811,7 @@ topics:
             app = Flask(__name__)
             app.register_blueprint(api)
             return app
+
         ```
 
         **Навіщо саме це тут:** Фабрика робить конфігурацію явною та дозволяє
@@ -818,12 +827,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Яка роль Blueprint у
-        Flask?","options":["Він замінює Python-модулі","Він групує
-        функціональність для подальшої реєстрації в застосунку","Він автоматично
-        створює базу даних","Він запускає окремий HTTP-сервер для кожного
-        маршруту"],"answer":1,"explanation":"Blueprint — композиційна одиниця;
-        він стає частиною застосунку після register_blueprint."}
+        {"type":"prediction","lang":"python","question":"Яка роль Blueprint у Flask?","options":["Він замінює Python-модулі","Він групує функціональність для подальшої реєстрації в застосунку","Він автоматично створює базу даних","Він запускає окремий HTTP-сервер для кожного маршруту"],"answer":1,"explanation":"Blueprint — композиційна одиниця; він стає частиною застосунку після register_blueprint."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Яка роль Blueprint у Flask?","options":["Він замінює Python-модулі","Він групує функціональність для подальшої реєстрації в застосунку","Він автоматично створює базу даних","Він запускає окремий HTTP-сервер для кожного маршруту"],"answer":1,"explanation":"Blueprint — композиційна одиниця; він стає частиною застосунку після register_blueprint."}]}
 
         ```
 
@@ -869,6 +879,7 @@ topics:
         with engine.begin() as connection:
             connection.execute(text('CREATE TABLE IF NOT EXISTS counter (value INTEGER)'))
             connection.execute(text('INSERT INTO counter(value) VALUES (:value)'), {'value': 1})
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -914,6 +925,7 @@ topics:
         with engine.begin() as connection:
             connection.execute(text('CREATE TABLE IF NOT EXISTS counter (value INTEGER)'))
             connection.execute(text('INSERT INTO counter(value) VALUES (:value)'), {'value': 1})
+
         ```
 
         **Навіщо саме це тут:** try/except тут не прибирає помилку, а гарантує,
@@ -930,12 +942,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Навіщо потрібен
-        rollback після помилки під час транзакції?","options":["Щоб автоматично
-        повторити будь-який SQL","Щоб повернути session до узгодженого стану й
-        не зафіксувати часткову зміну","Щоб приховати помилку від логів","Щоб
-        видалити всю базу даних"],"answer":1,"explanation":"Rollback скасовує
-        незавершені зміни поточної транзакції; він не замінює обробку помилки."}
+        {"type":"prediction","lang":"python","question":"Навіщо потрібен rollback після помилки під час транзакції?","options":["Щоб автоматично повторити будь-який SQL","Щоб повернути session до узгодженого стану й не зафіксувати часткову зміну","Щоб приховати помилку від логів","Щоб видалити всю базу даних"],"answer":1,"explanation":"Rollback скасовує незавершені зміни поточної транзакції; він не замінює обробку помилки."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Навіщо потрібен rollback після помилки під час транзакції?","options":["Щоб автоматично повторити будь-який SQL","Щоб повернути session до узгодженого стану й не зафіксувати часткову зміну","Щоб приховати помилку від логів","Щоб видалити всю базу даних"],"answer":1,"explanation":"Rollback скасовує незавершені зміни поточної транзакції; він не замінює обробку помилки."}]}
 
         ```
 
@@ -983,6 +996,7 @@ topics:
         def not_found(error):
             app.logger.info('not found: %s', error)
             return {'error': 'not found'}, 404
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1030,6 +1044,7 @@ topics:
         def not_found(error):
             app.logger.info('not found: %s', error)
             return {'error': 'not found'}, 404
+
         ```
 
         **Навіщо саме це тут:** Тест фіксує зовнішню обіцянку endpoint: статус і
@@ -1045,12 +1060,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що має перевіряти
-        endpoint-тест, крім того, що функція не впала?","options":["Тільки
-        кількість рядків реалізації","Статус, формат відповіді та важливий
-        побічний ефект","Назву локальної змінної","Лише час запуску
-        IDE"],"answer":1,"explanation":"Тест має захищати зовнішній контракт,
-        який бачить клієнт, а не випадкову внутрішню структуру."}
+        {"type":"prediction","lang":"python","question":"Що має перевіряти endpoint-тест, крім того, що функція не впала?","options":["Тільки кількість рядків реалізації","Статус, формат відповіді та важливий побічний ефект","Назву локальної змінної","Лише час запуску IDE"],"answer":1,"explanation":"Тест має захищати зовнішній контракт, який бачить клієнт, а не випадкову внутрішню структуру."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що має перевіряти endpoint-тест, крім того, що функція не впала?","options":["Тільки кількість рядків реалізації","Статус, формат відповіді та важливий побічний ефект","Назву локальної змінної","Лише час запуску IDE"],"answer":1,"explanation":"Тест має захищати зовнішній контракт, який бачить клієнт, а не випадкову внутрішню структуру."}]}
 
         ```
 
@@ -1103,6 +1119,7 @@ topics:
 
         def health():
             return {'status': 'ok'}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1150,6 +1167,7 @@ topics:
 
         def health():
             return {'status': 'ok'}
+
         ```
 
         **Навіщо саме це тут:** Фрагмент показує різницю між кодом застосунку та
@@ -1165,11 +1183,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що не слід вмикати в
-        production без спеціальної причини?","options":["Health endpoint","Тести
-        в CI","Debug і автоматичний reload","HTTPS на reverse
-        proxy"],"answer":2,"explanation":"Debug може розкрити внутрішні дані, а
-        reload не є production-супервізором."}
+        {"type":"prediction","lang":"python","question":"Що не слід вмикати в production без спеціальної причини?","options":["Health endpoint","Тести в CI","Debug і автоматичний reload","HTTPS на reverse proxy"],"answer":2,"explanation":"Debug може розкрити внутрішні дані, а reload не є production-супервізором."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що не слід вмикати в production без спеціальної причини?","options":["Health endpoint","Тести в CI","Debug і автоматичний reload","HTTPS на reverse proxy"],"answer":2,"explanation":"Debug може розкрити внутрішні дані, а reload не є production-супервізором."}]}
 
         ```
 
@@ -1218,6 +1238,7 @@ topics:
             def health():
                 return {"status": "ok", "testing": app.config["TESTING"]}
             return app
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1234,18 +1255,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Яка головна користь
-        application factory?","code":"from flask import Flask\n\ndef
-        create_app(testing=False):\n    app =
-        Flask(__name__)\n    app.config.from_mapping(TESTING=testing,
-        SECRET_KEY=\"dev-only\")\n    @app.get(\"/health\")\n    def
-        health():\n        return {\"status\": \"ok\", \"testing\":
-        app.config[\"TESTING\"]}\n    return app","options":["Створювати
-        застосунок із контрольованою конфігурацією для різних
-        середовищ","Автоматично запускати сервер у браузері","Замінювати всі
-        тести одним endpoint"],"answer":0,"explanation":"Factory робить
-        створення app повторюваним і дозволяє ізолювати test, development та
-        production конфігурації."}
+        {"type":"prediction","lang":"python","question":"Яка головна користь application factory?","options":["Створювати застосунок із контрольованою конфігурацією для різних середовищ","Автоматично запускати сервер у браузері","Замінювати всі тести одним endpoint"],"answer":0,"code":"from flask import Flask\n\ndef create_app(testing=False):\n    app = Flask(__name__)\n    app.config.from_mapping(TESTING=testing, SECRET_KEY=\"dev-only\")\n    @app.get(\"/health\")\n    def health():\n        return {\"status\": \"ok\", \"testing\": app.config[\"TESTING\"]}\n    return app","explanation":"Factory робить створення app повторюваним і дозволяє ізолювати test, development та production конфігурації."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Яка головна користь application factory?","options":["Створювати застосунок із контрольованою конфігурацією для різних середовищ","Автоматично запускати сервер у браузері","Замінювати всі тести одним endpoint"],"answer":0,"code":"from flask import Flask\n\ndef create_app(testing=False):\n    app = Flask(__name__)\n    app.config.from_mapping(TESTING=testing, SECRET_KEY=\"dev-only\")\n    @app.get(\"/health\")\n    def health():\n        return {\"status\": \"ok\", \"testing\": app.config[\"TESTING\"]}\n    return app","explanation":"Factory робить створення app повторюваним і дозволяє ізолювати test, development та production конфігурації."}]}
 
         ```
 
@@ -1274,6 +1290,7 @@ topics:
             def health():
                 return {"status": "ok", "testing": app.config["TESTING"]}
             return app
+
         ```
 
         **Навіщо саме цей фрагмент:** цей фрагмент показує найменший корисний
@@ -1340,6 +1357,7 @@ topics:
 
         def meta_view():
             return {"testing": current_app.testing, "request_id": g.request_id}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1356,16 +1374,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що найкраще зберігати в
-        `g`?","code":"from flask import Flask, current_app, g\n\napp =
-        Flask(__name__)\n\n@app.before_request\ndef
-        load_request_state():\n    g.request_id =
-        \"demo-1\"\n\n@app.get(\"/meta\")\ndef meta_view():\n    return
-        {\"testing\": current_app.testing, \"request_id\":
-        g.request_id}","options":["Дані, потрібні протягом поточного
-        запиту","Глобальну чергу всіх користувачів","Паролі користувачів на весь
-        час роботи сервера"],"answer":0,"explanation":"`g` прив'язаний до
-        активного контексту й очищається після запиту."}
+        {"type":"prediction","lang":"python","question":"Що найкраще зберігати в `g`?","options":["Дані, потрібні протягом поточного запиту","Глобальну чергу всіх користувачів","Паролі користувачів на весь час роботи сервера"],"answer":0,"code":"from flask import Flask, current_app, g\n\napp = Flask(__name__)\n\n@app.before_request\ndef load_request_state():\n    g.request_id = \"demo-1\"\n\n@app.get(\"/meta\")\ndef meta_view():\n    return {\"testing\": current_app.testing, \"request_id\": g.request_id}","explanation":"`g` прив'язаний до активного контексту й очищається після запиту."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що найкраще зберігати в `g`?","options":["Дані, потрібні протягом поточного запиту","Глобальну чергу всіх користувачів","Паролі користувачів на весь час роботи сервера"],"answer":0,"code":"from flask import Flask, current_app, g\n\napp = Flask(__name__)\n\n@app.before_request\ndef load_request_state():\n    g.request_id = \"demo-1\"\n\n@app.get(\"/meta\")\ndef meta_view():\n    return {\"testing\": current_app.testing, \"request_id\": g.request_id}","explanation":"`g` прив'язаний до активного контексту й очищається після запиту."}]}
 
         ```
 
@@ -1398,6 +1413,7 @@ topics:
 
         def meta_view():
             return {"testing": current_app.testing, "request_id": g.request_id}
+
         ```
 
         **Навіщо саме цей фрагмент:** контекстний приклад демонструє життєвий
@@ -1463,6 +1479,7 @@ topics:
             if request.form.get("csrf_token") != EXPECTED:
                 return {"error": "csrf"}, 400
             return {"saved": True}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1479,17 +1496,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Від чого захищає
-        CSRF-token?","code":"from flask import Flask, request\n\napp =
-        Flask(__name__)\nEXPECTED =
-        \"form-token\"\n\n@app.post(\"/settings\")\ndef settings():\n    if
-        request.form.get(\"csrf_token\") != EXPECTED:\n        return
-        {\"error\": \"csrf\"}, 400\n    return {\"saved\":
-        True}","options":["Від підробленого state-changing запиту з чужого
-        origin","Від усіх SQL injection автоматично","Від повільного
-        CPU-коду"],"answer":0,"explanation":"CSRF-token підтверджує, що запит
-        походить із форми, яку сервер видав користувачу; це окрема проблема від
-        SQL injection і XSS."}
+        {"type":"prediction","lang":"python","question":"Що поверне перевірка CSRF, якщо токен у формі відсутній?","code":"expected = \"token-42\"\nsubmitted = None\nif submitted != expected:\n    result = \"reject\"\nelse:\n    result = \"accept\"\nprint(result)","options":["reject","accept","raise KeyError"],"answer":0,"explanation":"Відсутній токен не збігається з очікуваним, тому запит треба відхилити."}
+
+        ```
+
+        ```interactive
+
+        {"type":"spot-the-bug","lang":"python","question":"Який рядок пропускає зміну стану без коректного CSRF-токена?","lines":["submitted = request.form.get(\"csrf_token\")","expected = session[\"csrf_token\"]","if submitted is not None and submitted != expected:","    abort(403)","transfer_funds(recipient, amount)"],"buggyLine":3,"explanation":"Умова приймає відсутній токен. Відхиляй запит щоразу, коли submitted не дорівнює expected."}
 
         ```
 
@@ -1520,6 +1533,7 @@ topics:
             if request.form.get("csrf_token") != EXPECTED:
                 return {"error": "csrf"}, 400
             return {"saved": True}
+
         ```
 
         **Навіщо саме цей фрагмент:** фрагмент показує точку контролю: request
@@ -1587,6 +1601,7 @@ topics:
             denied = require_editor()
             if denied: return denied
             return {"draft": "private"}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1602,17 +1617,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Яка перевірка
-        відповідає authorization?","code":"from flask import Flask, g\n\napp =
-        Flask(__name__)\n\ndef require_editor():\n    user = getattr(g,
-        \"user\", None)\n    if not user or \"editor\" not in
-        user[\"roles\"]:\n        return {\"error\": \"forbidden\"},
-        403\n    return None\n\n@app.get(\"/draft\")\ndef draft():\n    denied =
-        require_editor()\n    if denied: return denied\n    return {\"draft\":
-        \"private\"}","options":["Чи має current user потрібну роль або
-        ownership ресурсу","Чи правильний пароль під час login","Чи є URL довшим
-        за 10 символів"],"answer":0,"explanation":"Authorization вирішує, що
-        користувачеві дозволено після встановлення identity."}
+        {"type":"prediction","lang":"python","question":"Яка перевірка відповідає authorization?","options":["Чи має current user потрібну роль або ownership ресурсу","Чи правильний пароль під час login","Чи є URL довшим за 10 символів"],"answer":0,"code":"from flask import Flask, g\n\napp = Flask(__name__)\n\ndef require_editor():\n    user = getattr(g, \"user\", None)\n    if not user or \"editor\" not in user[\"roles\"]:\n        return {\"error\": \"forbidden\"}, 403\n    return None\n\n@app.get(\"/draft\")\ndef draft():\n    denied = require_editor()\n    if denied: return denied\n    return {\"draft\": \"private\"}","explanation":"Authorization вирішує, що користувачеві дозволено після встановлення identity."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Яка перевірка відповідає authorization?","options":["Чи має current user потрібну роль або ownership ресурсу","Чи правильний пароль під час login","Чи є URL довшим за 10 символів"],"answer":0,"code":"from flask import Flask, g\n\napp = Flask(__name__)\n\ndef require_editor():\n    user = getattr(g, \"user\", None)\n    if not user or \"editor\" not in user[\"roles\"]:\n        return {\"error\": \"forbidden\"}, 403\n    return None\n\n@app.get(\"/draft\")\ndef draft():\n    denied = require_editor()\n    if denied: return denied\n    return {\"draft\": \"private\"}","explanation":"Authorization вирішує, що користувачеві дозволено після встановлення identity."}]}
 
         ```
 
@@ -1647,6 +1658,7 @@ topics:
             denied = require_editor()
             if denied: return denied
             return {"draft": "private"}
+
         ```
 
         **Навіщо саме цей фрагмент:** приклад відділяє authentication від
@@ -1687,7 +1699,9 @@ topics:
         `@app.cli.command` реєструє Click-команду. Flask CLI створює app context, передає аргументи, а команда друкує лише короткий результат і завершується exit code. Бізнес-операцію краще винести в окрему функцію, яку викликають і CLI, і тест.
 
         ### Мінімальний приклад коду
+
         ```python
+
         import click
         from flask import Flask
 
@@ -1699,6 +1713,7 @@ topics:
             if count < 1:
                 raise click.ClickException("count must be positive")
             click.echo(f"created={count}")
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1708,7 +1723,15 @@ topics:
         Який exit результат очікувати для `--count 0`? Чому цю операцію не варто відкривати як публічний GET?
 
         ```interactive
-        {"type":"prediction","lang":"python","question":"Для чого Flask CLI?","code":"import click\nfrom flask import Flask\n\napp = Flask(__name__)\n\n@app.cli.command(\"seed-demo\")\n@click.option(\"--count\", default=1, type=int)\ndef seed_demo(count):\n    if count < 1:\n        raise click.ClickException(\"count must be positive\")\n    click.echo(f\"created={count}\")","options":["Для контрольованих службових операцій поза HTTP-запитами","Для автоматичного захисту всіх route","Для зберігання паролів у терміналі"],"answer":0,"explanation":"CLI підходить для операцій обслуговування, які запускає оператор або deployment pipeline."}
+
+        {"type":"prediction","lang":"python","question":"Для чого Flask CLI?","options":["Для контрольованих службових операцій поза HTTP-запитами","Для автоматичного захисту всіх route","Для зберігання паролів у терміналі"],"answer":0,"code":"import click\nfrom flask import Flask\n\napp = Flask(__name__)\n\n@app.cli.command(\"seed-demo\")\n@click.option(\"--count\", default=1, type=int)\ndef seed_demo(count):\n    if count < 1:\n        raise click.ClickException(\"count must be positive\")\n    click.echo(f\"created={count}\")","explanation":"CLI підходить для операцій обслуговування, які запускає оператор або deployment pipeline."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Для чого Flask CLI?","options":["Для контрольованих службових операцій поза HTTP-запитами","Для автоматичного захисту всіх route","Для зберігання паролів у терміналі"],"answer":0,"code":"import click\nfrom flask import Flask\n\napp = Flask(__name__)\n\n@app.cli.command(\"seed-demo\")\n@click.option(\"--count\", default=1, type=int)\ndef seed_demo(count):\n    if count < 1:\n        raise click.ClickException(\"count must be positive\")\n    click.echo(f\"created={count}\")","explanation":"CLI підходить для операцій обслуговування, які запускає оператор або deployment pipeline."}]}
+
         ```
 
         ### Як змінюється поведінка
@@ -1718,7 +1741,9 @@ topics:
         змішувати click.echo з бізнес-логікою; не перевіряти аргументи; запускати destructive command без confirmation; виводити секрети в stdout.
 
         ### На практиці
+
         ```python
+
         import click
         from flask import Flask
 
@@ -1730,6 +1755,7 @@ topics:
             if count < 1:
                 raise click.ClickException("count must be positive")
             click.echo(f"created={count}")
+
         ```
 
         **Навіщо саме цей фрагмент:** CLI-приклад показує безпечний операційний surface і не прив'язує службову дію до браузера чи публічного endpoint.
@@ -1786,6 +1812,7 @@ topics:
             response.headers["ETag"] = tag
             response.headers["Cache-Control"] = "public, max-age=60"
             return response
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1801,18 +1828,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Що означає 304 Not
-        Modified?","code":"from flask import Flask, request,
-        make_response\n\napp = Flask(__name__)\n\n@app.get(\"/version\")\ndef
-        version():\n    tag = '\"v1\"'\n    if
-        request.headers.get(\"If-None-Match\") == tag:\n        return \"\",
-        304\n    response = make_response({\"version\":
-        1})\n    response.headers[\"ETag\"] =
-        tag\n    response.headers[\"Cache-Control\"] = \"public,
-        max-age=60\"\n    return response","options":["Клієнт може використати
-        свою кешовану копію","Сервер створив новий ресурс","Запит завжди був
-        помилковим"],"answer":0,"explanation":"304 повідомляє, що представлення
-        не змінилося відносно validator, який надіслав клієнт."}
+        {"type":"prediction","lang":"python","question":"Що означає 304 Not Modified?","options":["Клієнт може використати свою кешовану копію","Сервер створив новий ресурс","Запит завжди був помилковим"],"answer":0,"code":"from flask import Flask, request, make_response\n\napp = Flask(__name__)\n\n@app.get(\"/version\")\ndef version():\n    tag = '\"v1\"'\n    if request.headers.get(\"If-None-Match\") == tag:\n        return \"\", 304\n    response = make_response({\"version\": 1})\n    response.headers[\"ETag\"] = tag\n    response.headers[\"Cache-Control\"] = \"public, max-age=60\"\n    return response","explanation":"304 повідомляє, що представлення не змінилося відносно validator, який надіслав клієнт."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Що означає 304 Not Modified?","options":["Клієнт може використати свою кешовану копію","Сервер створив новий ресурс","Запит завжди був помилковим"],"answer":0,"code":"from flask import Flask, request, make_response\n\napp = Flask(__name__)\n\n@app.get(\"/version\")\ndef version():\n    tag = '\"v1\"'\n    if request.headers.get(\"If-None-Match\") == tag:\n        return \"\", 304\n    response = make_response({\"version\": 1})\n    response.headers[\"ETag\"] = tag\n    response.headers[\"Cache-Control\"] = \"public, max-age=60\"\n    return response","explanation":"304 повідомляє, що представлення не змінилося відносно validator, який надіслав клієнт."}]}
 
         ```
 
@@ -1844,6 +1866,7 @@ topics:
             response.headers["ETag"] = tag
             response.headers["Cache-Control"] = "public, max-age=60"
             return response
+
         ```
 
         **Навіщо саме цей фрагмент:** фрагмент демонструє протокол, де перевірка
@@ -1913,6 +1936,7 @@ topics:
 
         def import_status(job_id):
             return jobs.get(job_id, {"error": "not found"}), 200 if job_id in jobs else 404
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -1928,19 +1952,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Коли доречний 202
-        Accepted?","code":"from flask import Flask, jsonify\nfrom uuid import
-        uuid4\n\napp = Flask(__name__)\njobs =
-        {}\n\n@app.post(\"/imports\")\ndef create_import():\n    job_id =
-        str(uuid4())\n    jobs[job_id] = {\"status\": \"queued\"}\n    return
-        jsonify({\"job_id\": job_id, \"status\": \"queued\"}),
-        202\n\n@app.get(\"/imports/<job_id>\")\ndef
-        import_status(job_id):\n    return jobs.get(job_id, {\"error\": \"not
-        found\"}), 200 if job_id in jobs else 404","options":["Коли запит
-        прийнято, але результат буде готовий асинхронно","Коли сервер уже
-        повернув повний ресурс","Лише коли запит має помилку
-        синтаксису"],"answer":0,"explanation":"202 відділяє прийняття роботи від
-        її завершення."}
+        {"type":"prediction","lang":"python","question":"Коли доречний 202 Accepted?","options":["Коли запит прийнято, але результат буде готовий асинхронно","Коли сервер уже повернув повний ресурс","Лише коли запит має помилку синтаксису"],"answer":0,"code":"from flask import Flask, jsonify\nfrom uuid import uuid4\n\napp = Flask(__name__)\njobs = {}\n\n@app.post(\"/imports\")\ndef create_import():\n    job_id = str(uuid4())\n    jobs[job_id] = {\"status\": \"queued\"}\n    return jsonify({\"job_id\": job_id, \"status\": \"queued\"}), 202\n\n@app.get(\"/imports/<job_id>\")\ndef import_status(job_id):\n    return jobs.get(job_id, {\"error\": \"not found\"}), 200 if job_id in jobs else 404","explanation":"202 відділяє прийняття роботи від її завершення."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Коли доречний 202 Accepted?","options":["Коли запит прийнято, але результат буде готовий асинхронно","Коли сервер уже повернув повний ресурс","Лише коли запит має помилку синтаксису"],"answer":0,"code":"from flask import Flask, jsonify\nfrom uuid import uuid4\n\napp = Flask(__name__)\njobs = {}\n\n@app.post(\"/imports\")\ndef create_import():\n    job_id = str(uuid4())\n    jobs[job_id] = {\"status\": \"queued\"}\n    return jsonify({\"job_id\": job_id, \"status\": \"queued\"}), 202\n\n@app.get(\"/imports/<job_id>\")\ndef import_status(job_id):\n    return jobs.get(job_id, {\"error\": \"not found\"}), 200 if job_id in jobs else 404","explanation":"202 відділяє прийняття роботи від її завершення."}]}
 
         ```
 
@@ -1977,6 +1995,7 @@ topics:
 
         def import_status(job_id):
             return jobs.get(job_id, {"error": "not found"}), 200 if job_id in jobs else 404
+
         ```
 
         **Навіщо саме цей фрагмент:** приклад показує мінімальний асинхронний
@@ -2050,6 +2069,7 @@ topics:
 
         def live():
             return {"status": "alive"}
+
         ```
 
         ### Пояснення кожного рядка прикладу
@@ -2066,20 +2086,13 @@ topics:
 
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"Чим readiness
-        відрізняється від liveness?","code":"import time\nfrom flask import
-        Flask, g, request\n\napp = Flask(__name__)\n\n@app.before_request\ndef
-        start_timer():\n    g.started =
-        time.perf_counter()\n\n@app.after_request\ndef
-        add_request_id(response):\n    response.headers[\"X-Request-ID\"] =
-        request.headers.get(\"X-Request-ID\", \"generated\")\n    return
-        response\n\n@app.get(\"/health/live\")\ndef live():\n    return
-        {\"status\": \"alive\"}","options":["Readiness показує, чи готові
-        критичні залежності, liveness — чи живий процес","Readiness завжди
-        перевіряє пароль","Це дві назви одного
-        stdout-повідомлення"],"answer":0,"explanation":"Розділення дозволяє
-        оркестратору перезапускати мертвий процес і не направляти трафік до
-        неготового."}
+        {"type":"prediction","lang":"python","question":"Чим readiness відрізняється від liveness?","options":["Readiness показує, чи готові критичні залежності, liveness — чи живий процес","Readiness завжди перевіряє пароль","Це дві назви одного stdout-повідомлення"],"answer":0,"code":"import time\nfrom flask import Flask, g, request\n\napp = Flask(__name__)\n\n@app.before_request\ndef start_timer():\n    g.started = time.perf_counter()\n\n@app.after_request\ndef add_request_id(response):\n    response.headers[\"X-Request-ID\"] = request.headers.get(\"X-Request-ID\", \"generated\")\n    return response\n\n@app.get(\"/health/live\")\ndef live():\n    return {\"status\": \"alive\"}","explanation":"Розділення дозволяє оркестратору перезапускати мертвий процес і не направляти трафік до неготового."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Чим readiness відрізняється від liveness?","options":["Readiness показує, чи готові критичні залежності, liveness — чи живий процес","Readiness завжди перевіряє пароль","Це дві назви одного stdout-повідомлення"],"answer":0,"code":"import time\nfrom flask import Flask, g, request\n\napp = Flask(__name__)\n\n@app.before_request\ndef start_timer():\n    g.started = time.perf_counter()\n\n@app.after_request\ndef add_request_id(response):\n    response.headers[\"X-Request-ID\"] = request.headers.get(\"X-Request-ID\", \"generated\")\n    return response\n\n@app.get(\"/health/live\")\ndef live():\n    return {\"status\": \"alive\"}","explanation":"Розділення дозволяє оркестратору перезапускати мертвий процес і не направляти трафік до неготового."}]}
 
         ```
 
@@ -2120,6 +2133,7 @@ topics:
 
         def live():
             return {"status": "alive"}
+
         ```
 
         **Навіщо саме цей фрагмент:** фрагмент показує спостережувану межу HTTP

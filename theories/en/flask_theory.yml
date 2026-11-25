@@ -40,6 +40,7 @@ topics:
 
         def hello(name):
             return {'message': f'Hello, {name}!'}
+
         ```
 
 
@@ -89,7 +90,10 @@ topics:
 
         def hello(name):
             return {'message': f'Hello, {name}!'}
-        ```**Why this is here:** The test via app.test_client() tests the true
+
+        ```
+
+        **Why this is here:** The test via app.test_client() tests the true
         boundary of HTTP: route selection, parameter passing, and response
         format. A direct call to hello("Ada") would miss decorator or URL
         errors.
@@ -103,15 +107,7 @@ topics:
 
         ```interactive
 
-
-        {"type":"prediction","lang":"python","question":"What will be the result
-        of a GET request to /hello/Ada?","code":"@app.get('/hello/<name>')\ndef
-        hello(name):\n    return {'message': f'Hello,
-        {name}!'}\n","options":["JSON with message = 'Hello, Ada!'","The text
-        will be printed only in the terminal","404 because the route contains
-        angle brackets","Error because name must be a
-        number"],"answer":0,"explanation":"The <name> is the variable part of
-        the route, and Flask passes it to the function as a string."}
+        {"type":"prediction","lang":"python","question":"What will be the result of a GET request to /hello/Ada?","code":"@app.get('/hello/<name>')\ndef hello(name):\n    return {'message': f'Hello, {name}!'}\n","options":["JSON with message = 'Hello, Ada!'","The text will be printed only in the terminal","404 because the route contains angle brackets","Error because name must be a number"],"answer":0,"explanation":"The <name> is the variable part of the route, and Flask passes it to the function as a string."}
 
         ```
 
@@ -160,6 +156,7 @@ topics:
             if not query:
                 return {'error': 'q is required'}, 400
             return {'query': query}, 200
+
         ```
 
 
@@ -211,7 +208,10 @@ topics:
             if not query:
                 return {'error': 'q is required'}, 400
             return {'query': query}, 200
-        ```**Why this is here:** The read → normalize → validate → execute
+
+        ```
+
+        **Why this is here:** The read → normalize → validate → execute
         sequence protects business logic from dirty input. Such an endpoint is
         easy to check with three queries: without q, with q= and with q=python.
 
@@ -224,16 +224,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"What status should the example return if q is missing or empty?","options":["200, because the endpoint technically started","201, because a search is being created","400, because the client did not provide the required parameter","500, because any missing data is a server error"],"answer":2,"code":"query = request.args.get('q', '').strip()\nif not query:\n    return {'error': 'q is required'}, 400\n","explanation":"The request reached the server, but does not contain the data required for the operation; this is a client request error."}
 
-        {"type":"prediction","lang":"python","question":"What status should the
-        example return if q is missing or empty?","code":"query =
-        request.args.get('q', '').strip()\nif not query:\n    return {'error':
-        'q is required'}, 400\n","options":["200, because the endpoint
-        technically started","201, because a search is being created","400,
-        because the client did not provide the required parameter","500, because
-        any missing data is a server error"],"answer":2,"explanation":"The
-        request reached the server, but does not contain the data required for
-        the operation; this is a client request error."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What status should the example return if q is missing or empty?","options":["200, because the endpoint technically started","201, because a search is being created","400, because the client did not provide the required parameter","500, because any missing data is a server error"],"answer":2,"code":"query = request.args.get('q', '').strip()\nif not query:\n    return {'error': 'q is required'}, 400\n","explanation":"The request reached the server, but does not contain the data required for the operation; this is a client request error."}]}
 
         ```
 
@@ -281,6 +278,7 @@ topics:
 
         def profile(name):
             return render_template('profile.html', name=name)
+
         ```
 
 
@@ -328,7 +326,10 @@ topics:
 
         def profile(name):
             return render_template('profile.html', name=name)
-        ```**Why this is here:** Template is responsible for the markup and
+
+        ```
+
+        **Why this is here:** Template is responsible for the markup and
         Python is responsible for the data. This separation allows you to change
         the design without rewriting the route and at the same time reduces the
         risk of HTML injection.
@@ -342,13 +343,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"Where should profile.html lie for render_template('profile.html', ...)?","options":["In the templates directory","In the static directory","In the root of the operating system","In the database"],"answer":0,"explanation":"Flask searches for Jinja templates in templates; static is for unchanged CSS, JS, and media."}
 
-        {"type":"prediction","lang":"python","question":"Where should
-        profile.html lie for render_template('profile.html',
-        ...)?","options":["In the templates directory","In the static
-        directory","In the root of the operating system","In the
-        database"],"answer":0,"explanation":"Flask searches for Jinja templates
-        in templates; static is for unchanged CSS, JS, and media."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Where should profile.html lie for render_template('profile.html', ...)?","options":["In the templates directory","In the static directory","In the root of the operating system","In the database"],"answer":0,"explanation":"Flask searches for Jinja templates in templates; static is for unchanged CSS, JS, and media."}]}
 
         ```
 
@@ -400,6 +401,7 @@ topics:
             if '@' not in email:
                 return {'error': 'invalid email'}, 422
             return {'ok': True}
+
         ```
 
 
@@ -453,7 +455,10 @@ topics:
             if '@' not in email:
                 return {'error': 'invalid email'}, 422
             return {'ok': True}
-        ```**Why it's here:** The snippet shows the line between receiving data
+
+        ```
+
+        **Why it's here:** The snippet shows the line between receiving data
         and deciding whether it's admissible. In the exercise, you can expand
         the rule, but the sequence does not change: accept, normalize, check,
         only then save.
@@ -467,14 +472,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"Why is server validation required even after HTML form validation?","options":["The browser always sends data twice","The client code can be bypassed or replaced","Flask can't read forms without it","Validation is only required for beautiful messages"],"answer":1,"explanation":"Anyone can send a request directly, bypassing the browser, so you can only trust the checks on the server."}
 
-        {"type":"prediction","lang":"python","question":"Why is server
-        validation required even after HTML form validation?","options":["The
-        browser always sends data twice","The client code can be bypassed or
-        replaced","Flask can't read forms without it","Validation is only
-        required for beautiful messages"],"answer":1,"explanation":"Anyone can
-        send a request directly, bypassing the browser, so you can only trust
-        the checks on the server."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Why is server validation required even after HTML form validation?","options":["The browser always sends data twice","The client code can be bypassed or replaced","Flask can't read forms without it","Validation is only required for beautiful messages"],"answer":1,"explanation":"Anyone can send a request directly, bypassing the browser, so you can only trust the checks on the server."}]}
 
         ```
 
@@ -523,6 +527,7 @@ topics:
 
         def status():
             return {'ok': True, 'checked_at': datetime.now(UTC).isoformat()}
+
         ```
 
 
@@ -571,7 +576,10 @@ topics:
 
         def status():
             return {'ok': True, 'checked_at': datetime.now(UTC).isoformat()}
-        ```**Why this is here:** The public payload is generated explicitly, so
+
+        ```
+
+        **Why this is here:** The public payload is generated explicitly, so
         changing the internal model doesn't accidentally change the API. In the
         exercise, add a field that cannot be returned and check that it does not
         appear in the answer.
@@ -585,14 +593,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"Why is datetime converted to ISO string before JSON response?","options":["JSON has a built-in datetime type","The client needs an unambiguous textual representation of the date","To hide the date from the client","Python does not know how to store datetime"],"answer":1,"explanation":"JSON has a limited set of types; ISO-8601 is a common and explicit datetime contract."}
 
-        {"type":"prediction","lang":"python","question":"Why is datetime
-        converted to ISO string before JSON response?","options":["JSON has a
-        built-in datetime type","The client needs an unambiguous textual
-        representation of the date","To hide the date from the client","Python
-        does not know how to store datetime"],"answer":1,"explanation":"JSON has
-        a limited set of types; ISO-8601 is a common and explicit datetime
-        contract."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Why is datetime converted to ISO string before JSON response?","options":["JSON has a built-in datetime type","The client needs an unambiguous textual representation of the date","To hide the date from the client","Python does not know how to store datetime"],"answer":1,"explanation":"JSON has a limited set of types; ISO-8601 is a common and explicit datetime contract."}]}
 
         ```
 
@@ -643,6 +650,7 @@ topics:
         def login():
             session['user_id'] = 42
             return {'logged_in': True}
+
         ```
 
 
@@ -694,7 +702,10 @@ topics:
         def login():
             session['user_id'] = 42
             return {'logged_in': True}
-        ```**Why this is here:** In the fragment, the session only transfers
+
+        ```
+
+        **Why this is here:** In the fragment, the session only transfers
         identity between requests. Checking the role or ownership of the
         resource must be a separate step, otherwise the authenticated user will
         gain redundant rights.
@@ -708,13 +719,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"What is the best thing to keep in a cookie-based session after login?","options":["Password in open form","The entire user object with personal data","Minimum ID or required claims","The result of an SQL query without a size limit"],"answer":2,"explanation":"A session must carry minimal state; secrets and large internal objects should not be stored there."}
 
-        {"type":"prediction","lang":"python","question":"What is the best thing
-        to keep in a cookie-based session after login?","options":["Password in
-        open form","The entire user object with personal data","Minimum ID or
-        required claims","The result of an SQL query without a size
-        limit"],"answer":2,"explanation":"A session must carry minimal state;
-        secrets and large internal objects should not be stored there."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What is the best thing to keep in a cookie-based session after login?","options":["Password in open form","The entire user object with personal data","Minimum ID or required claims","The result of an SQL query without a size limit"],"answer":2,"explanation":"A session must carry minimal state; secrets and large internal objects should not be stored there."}]}
 
         ```
 
@@ -765,6 +776,7 @@ topics:
             app = Flask(__name__)
             app.register_blueprint(api)
             return app
+
         ```
 
 
@@ -816,7 +828,10 @@ topics:
             app = Flask(__name__)
             app.register_blueprint(api)
             return app
-        ```**Why it's here:** A factory makes configuration explicit and allows
+
+        ```
+
+        **Why it's here:** A factory makes configuration explicit and allows
         you to test the same code in different environments. In the exercise,
         create a test app with an in-memory database without changing the
         production configuration.
@@ -830,13 +845,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"What is Blueprint's role in Flask?","options":["It replaces Python modules","It groups the functionality for further registration in the application","It automatically creates the database","It runs a separate HTTP server for each route"],"answer":1,"explanation":"Blueprint is a compositional unit; it becomes part of the application after register_blueprint."}
 
-        {"type":"prediction","lang":"python","question":"What is Blueprint's
-        role in Flask?","options":["It replaces Python modules","It groups the
-        functionality for further registration in the application","It
-        automatically creates the database","It runs a separate HTTP server for
-        each route"],"answer":1,"explanation":"Blueprint is a compositional
-        unit; it becomes part of the application after register_blueprint."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What is Blueprint's role in Flask?","options":["It replaces Python modules","It groups the functionality for further registration in the application","It automatically creates the database","It runs a separate HTTP server for each route"],"answer":1,"explanation":"Blueprint is a compositional unit; it becomes part of the application after register_blueprint."}]}
 
         ```
 
@@ -882,6 +897,7 @@ topics:
         with engine.begin() as connection:
             connection.execute(text('CREATE TABLE IF NOT EXISTS counter (value INTEGER)'))
             connection.execute(text('INSERT INTO counter(value) VALUES (:value)'), {'value': 1})
+
         ```
 
 
@@ -929,7 +945,10 @@ topics:
         with engine.begin() as connection:
             connection.execute(text('CREATE TABLE IF NOT EXISTS counter (value INTEGER)'))
             connection.execute(text('INSERT INTO counter(value) VALUES (:value)'), {'value': 1})
-        ```**Why this is here:** try/except here does not remove the error, but
+
+        ```
+
+        **Why this is here:** try/except here does not remove the error, but
         ensures that a failed transaction does not leave the session in an
         incomplete state. The exception still needs to be turned into a response
         or logged at the appropriate level.
@@ -943,15 +962,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"Why do I need a rollback after an error during a transaction?","options":["To automatically repeat any SQL","To return the session to a consistent state and not commit the partial change","To hide the error from the logs","To delete the entire database"],"answer":1,"explanation":"Rollback cancels the pending changes of the current transaction; it does not replace error handling."}
 
-        {"type":"prediction","lang":"python","question":"Why do I need a
-        rollback after an error during a transaction?","options":["To
-        automatically repeat any SQL","To return the session to a consistent
-        state and not commit the partial change","To hide the error from the
-        logs","To delete the entire
-        database"],"answer":1,"explanation":"Rollback cancels the pending
-        changes of the current transaction; it does not replace error
-        handling."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"Why do I need a rollback after an error during a transaction?","options":["To automatically repeat any SQL","To return the session to a consistent state and not commit the partial change","To hide the error from the logs","To delete the entire database"],"answer":1,"explanation":"Rollback cancels the pending changes of the current transaction; it does not replace error handling."}]}
 
         ```
 
@@ -999,6 +1016,7 @@ topics:
         def not_found(error):
             app.logger.info('not found: %s', error)
             return {'error': 'not found'}, 404
+
         ```
 
 
@@ -1047,7 +1065,10 @@ topics:
         def not_found(error):
             app.logger.info('not found: %s', error)
             return {'error': 'not found'}, 404
-        ```**Why this is here:** The test captures the endpoint's external
+
+        ```
+
+        **Why this is here:** The test captures the endpoint's external
         promise: status and error key. It does not depend on whether
         request.args is read in another helper function tomorrow.
 
@@ -1060,14 +1081,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"What is the endpoint test supposed to check, other than that the function didn't crash?","options":["Only the number of implementation lines","Status, response format, and important side effect","The name of the local variable","IDE startup time only"],"answer":1,"explanation":"The test should protect the external contract that the client sees, not random internal structure."}
 
-        {"type":"prediction","lang":"python","question":"What is the endpoint
-        test supposed to check, other than that the function didn't
-        crash?","options":["Only the number of implementation lines","Status,
-        response format, and important side effect","The name of the local
-        variable","IDE startup time only"],"answer":1,"explanation":"The test
-        should protect the external contract that the client sees, not random
-        internal structure."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What is the endpoint test supposed to check, other than that the function didn't crash?","options":["Only the number of implementation lines","Status, response format, and important side effect","The name of the local variable","IDE startup time only"],"answer":1,"explanation":"The test should protect the external contract that the client sees, not random internal structure."}]}
 
         ```
 
@@ -1118,6 +1138,7 @@ topics:
 
         def health():
             return {'status': 'ok'}
+
         ```
 
 
@@ -1167,7 +1188,10 @@ topics:
 
         def health():
             return {'status': 'ok'}
-        ```**Why it's here:** The snippet shows the difference between the
+
+        ```
+
+        **Why it's here:** The snippet shows the difference between the
         application code and how it runs. "Working locally" does not mean that
         TLS, secrets, timeouts, migrations, and observability are configured.
 
@@ -1180,12 +1204,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"What should not be enabled in production without a special reason?","options":["Health endpoint","Tests in CI","Debug and automatic reload","HTTPS on reverse proxy"],"answer":2,"explanation":"Debug can reveal internal data, and reload is not a production supervisor."}
 
-        {"type":"prediction","lang":"python","question":"What should not be
-        enabled in production without a special reason?","options":["Health
-        endpoint","Tests in CI","Debug and automatic reload","HTTPS on reverse
-        proxy"],"answer":2,"explanation":"Debug can reveal internal data, and
-        reload is not a production supervisor."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What should not be enabled in production without a special reason?","options":["Health endpoint","Tests in CI","Debug and automatic reload","HTTPS on reverse proxy"],"answer":2,"explanation":"Debug can reveal internal data, and reload is not a production supervisor."}]}
 
         ```
 
@@ -1236,6 +1261,7 @@ topics:
             def health():
                 return {"status": "ok", "testing": app.config["TESTING"]}
             return app
+
         ```
 
 
@@ -1253,19 +1279,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"What is the main benefit of application factory?","options":["Build an application with controlled configuration for different environments","Automatically start the server in the browser","Replace all tests with one endpoint"],"answer":0,"code":"from flask import Flask\n\ndef create_app(testing=False):\n    app = Flask(__name__)\n    app.config.from_mapping(TESTING=testing, SECRET_KEY=\"dev-only\")\n    @app.get(\"/health\")\n    def health():\n        return {\"status\": \"ok\", \"testing\": app.config[\"TESTING\"]}\n    return app","explanation":"Factory makes app creation repeatable and allows you to isolate test, development and production configurations."}
 
-        {"type":"prediction","lang":"python","question":"What is the main
-        benefit of application factory?","code":"from flask import Flask\n\ndef
-        create_app(testing=False):\n    app =
-        Flask(__name__)\n    app.config.from_mapping(TESTING=testing,
-        SECRET_KEY=\"dev-only\")\n    @app.get(\"/health\")\n    def
-        health():\n        return {\"status\": \"ok\", \"testing\":
-        app.config[\"TESTING\"]}\n    return app","options":["Build an
-        application with controlled configuration for different
-        environments","Automatically start the server in the browser","Replace
-        all tests with one endpoint"],"answer":0,"explanation":"Factory makes
-        app creation repeatable and allows you to isolate test, development and
-        production configurations."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What is the main benefit of application factory?","options":["Build an application with controlled configuration for different environments","Automatically start the server in the browser","Replace all tests with one endpoint"],"answer":0,"code":"from flask import Flask\n\ndef create_app(testing=False):\n    app = Flask(__name__)\n    app.config.from_mapping(TESTING=testing, SECRET_KEY=\"dev-only\")\n    @app.get(\"/health\")\n    def health():\n        return {\"status\": \"ok\", \"testing\": app.config[\"TESTING\"]}\n    return app","explanation":"Factory makes app creation repeatable and allows you to isolate test, development and production configurations."}]}
 
         ```
 
@@ -1295,7 +1315,10 @@ topics:
             def health():
                 return {"status": "ok", "testing": app.config["TESTING"]}
             return app
-        ```**Why this snippet:** this snippet shows the least useful factory
+
+        ```
+
+        **Why this snippet:** this snippet shows the least useful factory
         contract: the configuration is included in the app creation, and the
         endpoint only reads the ready state.
 
@@ -1357,6 +1380,7 @@ topics:
 
         def meta_view():
             return {"testing": current_app.testing, "request_id": g.request_id}
+
         ```
 
 
@@ -1374,17 +1398,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"What is the best thing to store in `g`?","options":["Data required during the current request","Global queue of all users","User passwords for the entire time the server is running"],"answer":0,"code":"from flask import Flask, current_app, g\n\napp = Flask(__name__)\n\n@app.before_request\ndef load_request_state():\n    g.request_id = \"demo-1\"\n\n@app.get(\"/meta\")\ndef meta_view():\n    return {\"testing\": current_app.testing, \"request_id\": g.request_id}","explanation":"`g` is bound to the active context and is cleared after a request."}
 
-        {"type":"prediction","lang":"python","question":"What is the best thing
-        to store in `g`?","code":"from flask import Flask, current_app, g\n\napp
-        = Flask(__name__)\n\n@app.before_request\ndef
-        load_request_state():\n    g.request_id =
-        \"demo-1\"\n\n@app.get(\"/meta\")\ndef meta_view():\n    return
-        {\"testing\": current_app.testing, \"request_id\":
-        g.request_id}","options":["Data required during the current
-        request","Global queue of all users","User passwords for the entire time
-        the server is running"],"answer":0,"explanation":"`g` is bound to the
-        active context and is cleared after a request."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What is the best thing to store in `g`?","options":["Data required during the current request","Global queue of all users","User passwords for the entire time the server is running"],"answer":0,"code":"from flask import Flask, current_app, g\n\napp = Flask(__name__)\n\n@app.before_request\ndef load_request_state():\n    g.request_id = \"demo-1\"\n\n@app.get(\"/meta\")\ndef meta_view():\n    return {\"testing\": current_app.testing, \"request_id\": g.request_id}","explanation":"`g` is bound to the active context and is cleared after a request."}]}
 
         ```
 
@@ -1418,7 +1438,10 @@ topics:
 
         def meta_view():
             return {"testing": current_app.testing, "request_id": g.request_id}
-        ```**Why this snippet:** a contextual example demonstrates the lifecycle
+
+        ```
+
+        **Why this snippet:** a contextual example demonstrates the lifecycle
         of data and explains why the Flask API can't be tested by just calling a
         function directly.
 
@@ -1479,6 +1502,7 @@ topics:
             if request.form.get("csrf_token") != EXPECTED:
                 return {"error": "csrf"}, 400
             return {"saved": True}
+
         ```
 
 
@@ -1496,18 +1520,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"What does the CSRF check return when the submitted token is missing?","code":"expected = \"token-42\"\nsubmitted = None\nif submitted != expected:\n    result = \"reject\"\nelse:\n    result = \"accept\"\nprint(result)","options":["reject","accept","raise KeyError"],"answer":0,"explanation":"A missing token does not match the expected token, so the request must be rejected."}
 
-        {"type":"prediction","lang":"python","question":"What does CSRF-token
-        protect against?","code":"from flask import Flask, request\n\napp =
-        Flask(__name__)\nEXPECTED =
-        \"form-token\"\n\n@app.post(\"/settings\")\ndef settings():\n    if
-        request.form.get(\"csrf_token\") != EXPECTED:\n        return
-        {\"error\": \"csrf\"}, 400\n    return {\"saved\":
-        True}","options":["From a fake state-changing request from someone
-        else's origin","From all SQL injection automatically","From slow CPU
-        code"],"answer":0,"explanation":"CSRF-token confirms that the request
-        comes from the form that the server issued to the user; this is a
-        separate problem from SQL injection and XSS."}
+        ```
+
+        ```interactive
+
+        {"type":"spot-the-bug","lang":"python","question":"Which line lets a state-changing request pass without a valid CSRF token?","lines":["submitted = request.form.get(\"csrf_token\")","expected = session[\"csrf_token\"]","if submitted is not None and submitted != expected:","    abort(403)","transfer_funds(recipient, amount)"],"buggyLine":3,"explanation":"The condition accepts a missing token. Reject whenever submitted does not equal expected."}
 
         ```
 
@@ -1539,7 +1558,10 @@ topics:
             if request.form.get("csrf_token") != EXPECTED:
                 return {"error": "csrf"}, 400
             return {"saved": True}
-        ```**Why this fragment:** The fragment shows a control point: request
+
+        ```
+
+        **Why this fragment:** The fragment shows a control point: request
         can be syntactically correct, but is not allowed to change data without
         an additional flag.
 
@@ -1603,6 +1625,7 @@ topics:
             denied = require_editor()
             if denied: return denied
             return {"draft": "private"}
+
         ```
 
 
@@ -1620,19 +1643,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"What verification corresponds to authorization?","options":["Does the current user have the required role or ownership of the resource","Is the password correct during login?","Is the URL longer than 10 characters"],"answer":0,"code":"from flask import Flask, g\n\napp = Flask(__name__)\n\ndef require_editor():\n    user = getattr(g, \"user\", None)\n    if not user or \"editor\" not in user[\"roles\"]:\n        return {\"error\": \"forbidden\"}, 403\n    return None\n\n@app.get(\"/draft\")\ndef draft():\n    denied = require_editor()\n    if denied: return denied\n    return {\"draft\": \"private\"}","explanation":"Authorization decides what the user is allowed to do after the identity is set."}
 
-        {"type":"prediction","lang":"python","question":"What verification
-        corresponds to authorization?","code":"from flask import Flask, g\n\napp
-        = Flask(__name__)\n\ndef require_editor():\n    user = getattr(g,
-        \"user\", None)\n    if not user or \"editor\" not in
-        user[\"roles\"]:\n        return {\"error\": \"forbidden\"},
-        403\n    return None\n\n@app.get(\"/draft\")\ndef draft():\n    denied =
-        require_editor()\n    if denied: return denied\n    return {\"draft\":
-        \"private\"}","options":["Does the current user have the required role
-        or ownership of the resource","Is the password correct during
-        login?","Is the URL longer than 10
-        characters"],"answer":0,"explanation":"Authorization decides what the
-        user is allowed to do after the identity is set."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What verification corresponds to authorization?","options":["Does the current user have the required role or ownership of the resource","Is the password correct during login?","Is the URL longer than 10 characters"],"answer":0,"code":"from flask import Flask, g\n\napp = Flask(__name__)\n\ndef require_editor():\n    user = getattr(g, \"user\", None)\n    if not user or \"editor\" not in user[\"roles\"]:\n        return {\"error\": \"forbidden\"}, 403\n    return None\n\n@app.get(\"/draft\")\ndef draft():\n    denied = require_editor()\n    if denied: return denied\n    return {\"draft\": \"private\"}","explanation":"Authorization decides what the user is allowed to do after the identity is set."}]}
 
         ```
 
@@ -1668,7 +1685,10 @@ topics:
             denied = require_editor()
             if denied: return denied
             return {"draft": "private"}
-        ```**Why this fragment:** the example separates authentication from
+
+        ```
+
+        **Why this fragment:** the example separates authentication from
         authorization and shows exactly where the request should stop before
         reading private data.
 
@@ -1704,7 +1724,9 @@ topics:
         `@app.cli.command` registers the Click command. The Flask CLI creates an app context, passes arguments, and the command prints only a short result and an exit code. It is better to put the business operation in a separate function that is called by both the CLI and the test.
 
         ### Minimal code example
+
         ```python
+
         import click
         from flask import Flask
 
@@ -1716,6 +1738,7 @@ topics:
             if count < 1:
                 raise click.ClickException("count must be positive")
             click.echo(f"created={count}")
+
         ```
 
         ### Explanation of each line of the example
@@ -1723,9 +1746,17 @@ topics:
 
         ### Try to predict
         What exit result to expect for `--count 0`? Why shouldn't this transaction be opened as a public GET?
+
         ```interactive
 
-        {"type":"prediction","lang":"python","question":"What is the Flask CLI for?","code":"import click\nfrom flask import Flask\n\napp = Flask(__name__)\n\n@app.cli.command(\"seed-demo\")\n@click.option(\"--count\", default=1, type=int)\ndef seed_demo(count):\n    if count < 1:\n        raise click.ClickException(\"count must be positive\")\n    click.echo(f\"created={count}\")","options":["For controlled service operations outside of HTTP requests","For automatic protection of all routes","To store passwords in the terminal"],"answer":0,"explanation":"The CLI is suitable for operator-triggered service operations or a deployment pipeline."}
+        {"type":"prediction","lang":"python","question":"What is the Flask CLI for?","options":["For controlled service operations outside of HTTP requests","For automatic protection of all routes","To store passwords in the terminal"],"answer":0,"code":"import click\nfrom flask import Flask\n\napp = Flask(__name__)\n\n@app.cli.command(\"seed-demo\")\n@click.option(\"--count\", default=1, type=int)\ndef seed_demo(count):\n    if count < 1:\n        raise click.ClickException(\"count must be positive\")\n    click.echo(f\"created={count}\")","explanation":"The CLI is suitable for operator-triggered service operations or a deployment pipeline."}
+
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What is the Flask CLI for?","options":["For controlled service operations outside of HTTP requests","For automatic protection of all routes","To store passwords in the terminal"],"answer":0,"code":"import click\nfrom flask import Flask\n\napp = Flask(__name__)\n\n@app.cli.command(\"seed-demo\")\n@click.option(\"--count\", default=1, type=int)\ndef seed_demo(count):\n    if count < 1:\n        raise click.ClickException(\"count must be positive\")\n    click.echo(f\"created={count}\")","explanation":"The CLI is suitable for operator-triggered service operations or a deployment pipeline."}]}
+
         ```
 
         ### How behavior changes
@@ -1735,7 +1766,9 @@ topics:
         mix click.echo with business logic; do not check arguments; run destructive command without confirmation; output secrets to stdout.
 
         ### In practice
+
         ```python
+
         import click
         from flask import Flask
 
@@ -1747,7 +1780,10 @@ topics:
             if count < 1:
                 raise click.ClickException("count must be positive")
             click.echo(f"created={count}")
-        ```**Why this snippet:** The CLI example shows a secure operating surface and does not bind the service action to a browser or public endpoint.
+
+        ```
+
+        **Why this snippet:** The CLI example shows a secure operating surface and does not bind the service action to a browser or public endpoint.
 
         **What to change yourself:** add `--dry-run`, a test for the exit code and a rerun that does not duplicate already created entries.
 
@@ -1800,6 +1836,7 @@ topics:
             response.headers["ETag"] = tag
             response.headers["Cache-Control"] = "public, max-age=60"
             return response
+
         ```
 
 
@@ -1816,19 +1853,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"What does 304 Not Modified mean?","options":["The client can use its cached copy","The server has created a new resource","The request was always wrong"],"answer":0,"code":"from flask import Flask, request, make_response\n\napp = Flask(__name__)\n\n@app.get(\"/version\")\ndef version():\n    tag = '\"v1\"'\n    if request.headers.get(\"If-None-Match\") == tag:\n        return \"\", 304\n    response = make_response({\"version\": 1})\n    response.headers[\"ETag\"] = tag\n    response.headers[\"Cache-Control\"] = \"public, max-age=60\"\n    return response","explanation":"A 304 says that the view has not changed relative to the validator that the client sent."}
 
-        {"type":"prediction","lang":"python","question":"What does 304 Not
-        Modified mean?","code":"from flask import Flask, request,
-        make_response\n\napp = Flask(__name__)\n\n@app.get(\"/version\")\ndef
-        version():\n    tag = '\"v1\"'\n    if
-        request.headers.get(\"If-None-Match\") == tag:\n        return \"\",
-        304\n    response = make_response({\"version\":
-        1})\n    response.headers[\"ETag\"] =
-        tag\n    response.headers[\"Cache-Control\"] = \"public,
-        max-age=60\"\n    return response","options":["The client can use its
-        cached copy","The server has created a new resource","The request was
-        always wrong"],"answer":0,"explanation":"A 304 says that the view has
-        not changed relative to the validator that the client sent."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"What does 304 Not Modified mean?","options":["The client can use its cached copy","The server has created a new resource","The request was always wrong"],"answer":0,"code":"from flask import Flask, request, make_response\n\napp = Flask(__name__)\n\n@app.get(\"/version\")\ndef version():\n    tag = '\"v1\"'\n    if request.headers.get(\"If-None-Match\") == tag:\n        return \"\", 304\n    response = make_response({\"version\": 1})\n    response.headers[\"ETag\"] = tag\n    response.headers[\"Cache-Control\"] = \"public, max-age=60\"\n    return response","explanation":"A 304 says that the view has not changed relative to the validator that the client sent."}]}
 
         ```
 
@@ -1861,7 +1892,10 @@ topics:
             response.headers["ETag"] = tag
             response.headers["Cache-Control"] = "public, max-age=60"
             return response
-        ```**Why this snippet:** The snippet demonstrates a protocol where
+
+        ```
+
+        **Why this snippet:** The snippet demonstrates a protocol where
         header validation can remove the body, but must not change the semantics
         of the resource.
 
@@ -1929,6 +1963,7 @@ topics:
 
         def import_status(job_id):
             return jobs.get(job_id, {"error": "not found"}), 200 if job_id in jobs else 404
+
         ```
 
 
@@ -1946,20 +1981,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"When is 202 Accepted appropriate?","options":["When the request is accepted, but the result will be ready asynchronously","When the server has already returned the full resource","Only when the query has a syntax error"],"answer":0,"code":"from flask import Flask, jsonify\nfrom uuid import uuid4\n\napp = Flask(__name__)\njobs = {}\n\n@app.post(\"/imports\")\ndef create_import():\n    job_id = str(uuid4())\n    jobs[job_id] = {\"status\": \"queued\"}\n    return jsonify({\"job_id\": job_id, \"status\": \"queued\"}), 202\n\n@app.get(\"/imports/<job_id>\")\ndef import_status(job_id):\n    return jobs.get(job_id, {\"error\": \"not found\"}), 200 if job_id in jobs else 404","explanation":"202 separates acceptance of work from its completion."}
 
-        {"type":"prediction","lang":"python","question":"When is 202 Accepted
-        appropriate?","code":"from flask import Flask, jsonify\nfrom uuid import
-        uuid4\n\napp = Flask(__name__)\njobs =
-        {}\n\n@app.post(\"/imports\")\ndef create_import():\n    job_id =
-        str(uuid4())\n    jobs[job_id] = {\"status\": \"queued\"}\n    return
-        jsonify({\"job_id\": job_id, \"status\": \"queued\"}),
-        202\n\n@app.get(\"/imports/<job_id>\")\ndef
-        import_status(job_id):\n    return jobs.get(job_id, {\"error\": \"not
-        found\"}), 200 if job_id in jobs else 404","options":["When the request
-        is accepted, but the result will be ready asynchronously","When the
-        server has already returned the full resource","Only when the query has
-        a syntax error"],"answer":0,"explanation":"202 separates acceptance of
-        work from its completion."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"When is 202 Accepted appropriate?","options":["When the request is accepted, but the result will be ready asynchronously","When the server has already returned the full resource","Only when the query has a syntax error"],"answer":0,"code":"from flask import Flask, jsonify\nfrom uuid import uuid4\n\napp = Flask(__name__)\njobs = {}\n\n@app.post(\"/imports\")\ndef create_import():\n    job_id = str(uuid4())\n    jobs[job_id] = {\"status\": \"queued\"}\n    return jsonify({\"job_id\": job_id, \"status\": \"queued\"}), 202\n\n@app.get(\"/imports/<job_id>\")\ndef import_status(job_id):\n    return jobs.get(job_id, {\"error\": \"not found\"}), 200 if job_id in jobs else 404","explanation":"202 separates acceptance of work from its completion."}]}
 
         ```
 
@@ -1999,7 +2027,10 @@ topics:
 
         def import_status(job_id):
             return jobs.get(job_id, {"error": "not found"}), 200 if job_id in jobs else 404
-        ```**Why this fragment:** the example shows a minimal asynchronous
+
+        ```
+
+        **Why this fragment:** the example shows a minimal asynchronous
         contract that can be scaled by the queue system without changing the
         client model.
 
@@ -2069,6 +2100,7 @@ topics:
 
         def live():
             return {"status": "alive"}
+
         ```
 
 
@@ -2086,21 +2118,13 @@ topics:
 
         ```interactive
 
+        {"type":"prediction","lang":"python","question":"How does readiness differ from liveness?","options":["Readiness shows whether critical dependencies are ready, liveness — whether the process is alive","Readiness always checks the password","These are two names of the same stdout message"],"answer":0,"code":"import time\nfrom flask import Flask, g, request\n\napp = Flask(__name__)\n\n@app.before_request\ndef start_timer():\n    g.started = time.perf_counter()\n\n@app.after_request\ndef add_request_id(response):\n    response.headers[\"X-Request-ID\"] = request.headers.get(\"X-Request-ID\", \"generated\")\n    return response\n\n@app.get(\"/health/live\")\ndef live():\n    return {\"status\": \"alive\"}","explanation":"Splitting allows the orchestrator to restart a dead process and not send traffic to an unready one."}
 
-        {"type":"prediction","lang":"python","question":"How does readiness
-        differ from liveness?","code":"import time\nfrom flask import Flask, g,
-        request\n\napp = Flask(__name__)\n\n@app.before_request\ndef
-        start_timer():\n    g.started =
-        time.perf_counter()\n\n@app.after_request\ndef
-        add_request_id(response):\n    response.headers[\"X-Request-ID\"] =
-        request.headers.get(\"X-Request-ID\", \"generated\")\n    return
-        response\n\n@app.get(\"/health/live\")\ndef live():\n    return
-        {\"status\": \"alive\"}","options":["Readiness shows whether critical
-        dependencies are ready, liveness — whether the process is
-        alive","Readiness always checks the password","These are two names of
-        the same stdout message"],"answer":0,"explanation":"Splitting allows the
-        orchestrator to restart a dead process and not send traffic to an
-        unready one."}
+        ```
+
+        ```interactive
+
+        {"type":"quiz","questions":[{"question":"How does readiness differ from liveness?","options":["Readiness shows whether critical dependencies are ready, liveness — whether the process is alive","Readiness always checks the password","These are two names of the same stdout message"],"answer":0,"code":"import time\nfrom flask import Flask, g, request\n\napp = Flask(__name__)\n\n@app.before_request\ndef start_timer():\n    g.started = time.perf_counter()\n\n@app.after_request\ndef add_request_id(response):\n    response.headers[\"X-Request-ID\"] = request.headers.get(\"X-Request-ID\", \"generated\")\n    return response\n\n@app.get(\"/health/live\")\ndef live():\n    return {\"status\": \"alive\"}","explanation":"Splitting allows the orchestrator to restart a dead process and not send traffic to an unready one."}]}
 
         ```
 
@@ -2142,7 +2166,10 @@ topics:
 
         def live():
             return {"status": "alive"}
-        ```**Why this snippet:** The snippet shows the observed HTTP limit
+
+        ```
+
+        **Why this snippet:** The snippet shows the observed HTTP limit
         without being tied to a specific monitor or cloud provider.
 
         **What to change yourself:** add readiness with a controlled fake
